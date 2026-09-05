@@ -1,0 +1,26 @@
+* text=auto eol=lf
+
+# Windows batch/cmd scripts require CRLF or they silently fail
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# The shipped INI is a checked-in copy of what IniWriter produces at runtime, and
+# IniWriter writes CRLF. Under the `* text=auto eol=lf` above it would check out
+# LF, so package-release.ps1 would base64 an LF copy into launcher-manifest.json
+# on CI and a CRLF copy on a maintainer's machine - two ZIPs that differ for a
+# reason nothing reports, and a launcher-seeded config whose line endings differ
+# from a mod-written one on the same install.
+*.ini text eol=crlf
+
+# Binary files (do not normalize)
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.dll binary
+*.asi binary
+*.exe binary
+*.pdb binary
+*.lib binary

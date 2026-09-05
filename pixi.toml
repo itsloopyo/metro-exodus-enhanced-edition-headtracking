@@ -1,0 +1,73 @@
+[workspace]
+name = "metro-exodus-enhanced-edition-headtracking"
+version = "0.0.0"
+description = "Head tracking mod for Metro Exodus Enhanced Edition using CameraUnlock shared library"
+license = "MIT"
+license-file = "LICENSE"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+# CMake, MSBuild and git come from the machine (and from the CI runner image),
+# so this workspace declares no conda dependencies and pixi is a task runner
+# only. build.yml passes run-install: false for the same reason.
+[tasks]
+# Move the cameraunlock-core pointer to the remote tip. Deliberate, with a
+# commit attached - nothing depends on it.
+sync = { cmd = "git submodule update --remote cameraunlock-core" }
+
+# Refresh vendor/ultimate-asi-loader from upstream. Also deliberate and also
+# depended on by nothing: build, package and release consume whatever is
+# committed under vendor/.
+update-deps = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-deps.ps1" }
+
+configure = { cmd = "cmake -S . -B build -A x64" }
+
+build = { cmd = "cmake --build build --config Release", depends-on = ["configure"] }
+build-debug = { cmd = "cmake --build build --config Debug", depends-on = ["configure"] }
+
+test = { cmd = "ctest --test-dir build -C Debug --output-on-failure", depends-on = ["build-debug"] }
+
+# The Debug run above is not the binary that ships. Release is /O2 and links a
+# different CRT, and this mod is float-heavy enough that an optimiser-exposed
+# difference would otherwise reach a player with nothing having run against it.
+test-release = { cmd = "ctest --test-dir build -C Release --output-on-failure", depends-on = ["build"] }
+
+# The fleet-wide linter over the wrapper scripts, the README and this file. Lives
+# in the submodule because every mod is checked against the same templates.
+#
+# NOT wired into build.yml, and this is why: its `readme` rule fails any README
+# whose opening sentence says "any OpenTrack compatible tracker", and that
+# sentence is the fixed template AGENTS.md requires every mod's README to open
+# with, word for word. The two contradict each other, so gating CI on the linter
+# would mean a red build for following the doctrine. Run it by hand, read the
+# rest of what it says, and treat that one rule as known-wrong until the core
+# repo settles it.
+conformance = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File cameraunlock-core/scripts/conformance.ps1" }
+
+# The manifest-versus-ZIP check on its own. It already runs inside
+# package-release.ps1; this is the discoverable entry point for running it
+# against an existing ZIP without rebuilding.
+validate-manifest = { cmd = "node cameraunlock-core/scripts/validate-manifest.mjs" }
+
+release-nightly = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-nightly.ps1" }
+
+# depends-on test, not just build: scripts/release.ps1 calls `pixi run build`
+# then `pixi run package` and never `pixi run test`, so without this a local
+# release can cut an installer ZIP out of a tree whose suites fail. CI happened
+# to be covered because build.yml runs the suites separately.
+package = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["test", "build"] }
+
+install = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy.ps1", depends-on = ["build"] }
+# cmd.exe directly rather than through powershell -Command: the wrapper is a
+# batch file that forwards `%*` to the shared body, and a PowerShell call
+# operator swallows the game path a user passes as `pixi run uninstall <path>`.
+# `/y` because the shared body ends on `pause` without it, and a pixi task has
+# no console to press a key at. The body's parser takes flags in any position,
+# so a path appended after this still lands as the path.
+uninstall = { cmd = 'cmd /c scripts\uninstall.cmd /y' }
+
+clean = { cmd = "cmake -E rm -rf build bin release" }
+
+release = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1" }
+
+[dependencies]

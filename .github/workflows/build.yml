@@ -1,0 +1,111 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+
+# Read-only token. This job only checks out and builds; nothing it runs needs
+# to write to the repository, and the default token permissions are whatever the
+# repository setting happens to be rather than what this workflow needs.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and Validate
+    runs-on: windows-latest
+    # Invoke-VersionCommit writes "chore: bump version to X.Y.Z", so that is the
+    # prefix to skip. The old 'Release v' matched nothing this repo ever commits,
+    # which meant every release ran this job in parallel with the release job
+    # doing the identical build.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore: bump version to ') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          submodules: recursive
+
+      - name: Setup Visual Studio environment
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
+
+      # run-install: false - this workspace declares no conda dependencies, so
+      # pixi is only a task runner here (CMake and MSBuild come from the runner
+      # image). The action's post-install `pixi list` errors on an empty env.
+      - name: Setup pixi
+        uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          run-install: false
+
+      # Build + package through the SAME commands a developer runs locally. All
+      # build logic lives in the pixi task chain (setup -> build-debug / build
+      # -> package); the workflow owns none, so local and CI can't drift.
+      - name: Build Debug
+        shell: pwsh
+        run: pixi run build-debug
+
+      # `package` depends on `test`, so the Debug suites run inside this step.
+      # A separate `pixi run test` before it would run them a second time, and
+      # metroex_udp_recovery_tests alone takes nine seconds of real sockets.
+      - name: Build Release and package
+        shell: pwsh
+        run: pixi run package
+
+      # The suites again, against the binary that actually ships: Release is /O2
+      # and a different CRT, and nothing else ever runs that configuration.
+      - name: Run tests against the Release build
+        shell: pwsh
+        run: pixi run test-release
+
+
+      - name: Verify build outputs
+        shell: pwsh
+        run: |
+          $requiredFiles = @(
+            "bin/Release/MetroExodusHeadTracking.asi",
+            "bin/Debug/MetroExodusHeadTracking.asi"
+          )
+          $allExist = $true
+          foreach ($file in $requiredFiles) {
+            if (Test-Path $file) {
+              $size = (Get-Item $file).Length / 1KB
+              Write-Host "  $file ($([math]::Round($size, 2)) KB)" -ForegroundColor Green
+            } else {
+              Write-Host "  Missing: $file" -ForegroundColor Red
+              $allExist = $false
+            }
+          }
+          if (-not $allExist) { Write-Host "::error::Some build outputs are missing"; exit 1 }
+
+      - name: Verify installer was produced
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "release/*-installer.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $installer) {
+            Write-Host "::error::No installer ZIP was produced by the package step"
+            exit 1
+          }
+
+      # So a tester can be handed a build without cutting a release and without
+      # anyone pushing a scratch branch to a public repo.
+      - name: Upload the packaged ZIPs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: MetroExodusHeadTracking-${{ github.sha }}
+          path: release/*.zip
+          if-no-files-found: error
+          retention-days: 14
+          # The name is stable across a re-run of the same run, and v7 fails on a
+          # name that already exists. Without this, "Re-run jobs" on a run whose
+          # upload succeeded is a red build for no reason.
+          overwrite: true
