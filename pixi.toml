@@ -11,6 +11,7 @@ platforms = ["win-64"]
 # so this workspace declares no conda dependencies and pixi is a task runner
 # only. build.yml passes run-install: false for the same reason.
 [tasks]
+update-submodule = "git submodule update --remote cameraunlock-core && powershell -NoProfile -ExecutionPolicy Bypass -File cameraunlock-core/scripts/update-submodule.ps1"
 # Move the cameraunlock-core pointer to the remote tip. Deliberate, with a
 # commit attached - nothing depends on it.
 sync = { cmd = "git submodule update --remote cameraunlock-core" }
