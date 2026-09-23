@@ -13,8 +13,8 @@ void AdsState::Initialise() {
     // Saying it twice in the log buys nothing, so this only says what the
     // player loses.
     if (const char* cause = BuildLookupCause(build.outcome)) {
-        Log::Line("ADS: %s; the sights are never detected, so the ADS mode cycle has nothing to "
-                  "act on",
+        Log::Line("ADS: %s; the sights are never detected, so the lean is not eased out while "
+                  "aiming",
                   cause);
         return;
     }
@@ -25,7 +25,7 @@ void AdsState::Initialise() {
     // RVA 0 is the DOS header.
     if (p.ads_flag_rva == 0) {
         Log::Line("ADS: build %s has no aim flag address yet; the sights are never detected, "
-                  "so the ADS mode cycle has nothing to act on",
+                  "so the lean is not eased out while aiming",
                   p.name);
         return;
     }

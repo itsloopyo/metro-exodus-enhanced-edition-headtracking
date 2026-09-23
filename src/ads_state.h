@@ -14,9 +14,9 @@ namespace metroex {
 // The flag is a static byte in MetroExodus.exe, so it is routed through the
 // build-profile registry like every other pinned address here. On a build with no
 // matching profile - or a profile written before the address was derived - nothing
-// is read and IsAiming() answers false, which is the safe direction: the mod
-// behaves exactly as it did before ADS handling existed rather than stranding the
-// player in ADS behaviour on a build it cannot read.
+// is read and IsAiming() answers false, which is the safe direction: the lean
+// stays in, rather than being held out through hip fire on a build the mod
+// cannot read.
 class AdsState {
 public:
     // Matches the running EXE against the known profiles and logs the outcome.
@@ -25,8 +25,8 @@ public:
     // Polled, never latched: this re-reads the game's flag on every call. Enter
     // and exit events fire unevenly - an exit that never arrives after firing, a
     // state machine that transitions without an event - and a latched flag that
-    // misses one edge either strands the player in ADS behaviour or leaks
-    // hip-fire tracking into the aim.
+    // misses one edge either holds the lean out through hip fire or leaves it
+    // in through the aim.
     bool IsAiming() const;
 
 private:

@@ -148,23 +148,25 @@ CameraFrame MakeFrame(const CameraBasis& clean, const CameraBasis& drawn,
 // here: the mark is re-derived on those frames too, rather than left standing
 // against a camera it no longer describes.
 void BuildFromCleanCamera(void* block, void* b, void* c, void* d, const CameraBasis& clean,
-                          const TrackingState& state, AdsMode adsMode) {
+                          const TrackingState& state) {
     g_original(block, b, c, d);
-    g_reticle.Update(MakeFrame(clean, clean, state), g_fov.Tangents(), adsMode);
+    g_reticle.Update(MakeFrame(clean, clean, state), g_fov.Tangents());
 }
 
 void LogDiscovery(const CameraBasis& clean, const CameraBasis& drawn, const CameraBasis& built,
-                  const HeadPose& pose, const EngineHeadPose& engine, const TrackingState& state) {
+                  const HeadPose& pose, const EngineHeadPose& engine, const TrackingState& state,
+                  const ZoomFactor& zoom) {
     static uint64_t lastMs = 0;
     const uint64_t now = GetTickCount64();
     if (now - lastMs < 1000) return;
     lastMs = now;
     const HalfFieldTangents t = g_fov.Tangents();
-    Log::Line("Camera.Discovery %s aiming=%d | tracker ypr=(%.2f,%.2f,%.2f) xyz=(%.3f,%.3f,%.3f) "
-              "haspos=%d -> engine ypr=(%.2f,%.2f,%.2f) xyz=(%.3f,%.3f,%.3f)",
-              TrackingVerdictName(state.verdict), state.aiming ? 1 : 0, pose.yaw, pose.pitch,
-              pose.roll, pose.x, pose.y, pose.z, pose.has_position ? 1 : 0, engine.yaw,
-              engine.pitch, engine.roll, engine.x, engine.y, engine.z);
+    Log::Line("Camera.Discovery %s aiming=%d zoom=%.4f valid=%d | applied ypr=(%.2f,%.2f,%.2f) "
+              "xyz=(%.3f,%.3f,%.3f) haspos=%d -> engine ypr=(%.2f,%.2f,%.2f) xyz=(%.3f,%.3f,%.3f)",
+              TrackingVerdictName(state.verdict), state.aiming ? 1 : 0, zoom.value,
+              zoom.valid ? 1 : 0, pose.yaw, pose.pitch, pose.roll, pose.x, pose.y, pose.z,
+              pose.has_position ? 1 : 0, engine.yaw, engine.pitch, engine.roll, engine.x, engine.y,
+              engine.z);
     Log::Line("Camera.Discovery clean pos=(%.3f,%.3f,%.3f) fwd=(%.4f,%.4f,%.4f) "
               "up=(%.4f,%.4f,%.4f) right=(%.4f,%.4f,%.4f) | drawn pos=(%.3f,%.3f,%.3f) "
               "fwd=(%.4f,%.4f,%.4f) up=(%.4f,%.4f,%.4f) | tan=(%.4f,%.4f) valid=%d",
@@ -211,22 +213,23 @@ void __fastcall ViewBuilderDetour(void* block, void* b, void* c, void* d) {
     g_gameState.Update();
     g_fov.Update();
 
-    const bool aiming = g_ads.IsAiming();
-    // Read once for the whole frame, and handed to both consumers. The hotkey
-    // thread can advance the cycle between two reads, and a frame that read it
-    // twice could feed the pose in one mode and draw the mark in the next.
-    const AdsMode adsMode = g_tracking->GetAdsMode();
-    HeadPose pose;
-    const TrackingState state =
-        g_tracking->SamplePerFrame(g_gameState.IsInGameplay(), aiming, adsMode, pose);
+    const bool inGameplay = g_gameState.IsInGameplay();
+    // Read off the camera rather than off the pose, so the terms are in the log
+    // without a tracker connected.
+    const ZoomFactor zoom = g_fov.Zoom(inGameplay);
+    HeadPose sampled;
+    const TrackingState state = g_tracking->SamplePerFrame(inGameplay, g_ads.IsAiming(), sampled);
 
     const CameraBasis clean = ReadBasis(g_block);
 
     if (!PoseApplies(state.verdict)) {
-        BuildFromCleanCamera(block, b, c, d, clean, state, adsMode);
+        BuildFromCleanCamera(block, b, c, d, clean, state);
         return;
     }
 
+    // Before the camera write, so the view, the torch and the mark all follow
+    // the same scaled pose.
+    const HeadPose pose = ScalePoseForZoom(sampled, zoom.value);
     const EngineHeadPose engine = ToEngineConvention(pose);
     const CameraBasis drawn = ApplyHeadPose(clean, engine, g_tracking->IsWorldSpaceYaw());
 
@@ -238,7 +241,7 @@ void __fastcall ViewBuilderDetour(void* block, void* b, void* c, void* d) {
     // all-zero axes that pass every isfinite() call.
     if (!IsFinite(drawn.position) || !IsUsableAxis(drawn.forward) ||
         !IsUsableAxis(drawn.up) || !IsUsableAxis(drawn.right)) {
-        BuildFromCleanCamera(block, b, c, d, clean, state, adsMode);
+        BuildFromCleanCamera(block, b, c, d, clean, state);
         return;
     }
 
@@ -258,13 +261,13 @@ void __fastcall ViewBuilderDetour(void* block, void* b, void* c, void* d) {
     // Against the basis this frame was actually drawn with, not the one before
     // it: the engine has just built its matrices from `drawn`, so that is what
     // the mark has to be projected through.
-    g_reticle.Update(MakeFrame(clean, drawn, state), g_fov.Tangents(), adsMode);
+    g_reticle.Update(MakeFrame(clean, drawn, state), g_fov.Tangents());
 
     if (!g_injectedOnce) {
         g_injectedOnce = true;
         Log::Line("Camera: head tracking is reaching the view");
     }
-    if (g_discovery) LogDiscovery(clean, drawn, built, pose, engine, state);
+    if (g_discovery) LogDiscovery(clean, drawn, built, pose, engine, state, zoom);
 }
 
 }  // namespace

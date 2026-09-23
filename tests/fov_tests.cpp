@@ -6,9 +6,11 @@
 // same relationship, so a reticle drawn with them lands where the engine's own
 // unprojection says it should.
 
+#include <cmath>
 #include <limits>
 
 #include "fov.h"
+#include "head_transform.h"
 #include "test_harness.h"
 
 namespace {
@@ -82,6 +84,77 @@ void TheEndsOfTheEnginesOwnClampAreProjections() {
     Check(wide.y > narrow.y, "the wider one has the larger half-field");
 }
 
+// Ordinary play draws at the live base, so the factor has to be exactly 1 there:
+// anything else scales every frame of head tracking by a constant.
+void TheZoomFactorIsOneAtTheBase() {
+    const metroex::ZoomFactor z = metroex::ZoomFromFieldsOfView(60.0f, 60.0f);
+    Check(z.valid, "a camera at the base field of view is a readable zoom");
+    CheckNear(z.value, 1.0f, "and its factor is 1");
+}
+
+// The ratio of the two half-field tangents, not of the two angles: 90 against a
+// base of 90 halved to tan 0.5 is exactly 0.5.
+void TheZoomFactorIsTheRatioOfTheHalfFieldTangents() {
+    const float scoped = 2.0f * std::atan(0.5f) * 57.29577951f;
+    const metroex::ZoomFactor z = metroex::ZoomFromFieldsOfView(scoped, 90.0f);
+    Check(z.valid, "a scoped camera is a readable zoom");
+    CheckNear(z.value, 0.5f, "a half-field tangent halved is a factor of one half");
+}
+
+void AnUnreadableFieldOfViewIsNoCompensation() {
+    const metroex::ZoomFactor z = metroex::ZoomFromFieldsOfView(0.0f, 60.0f);
+    Check(!z.valid, "a camera that has not drawn yet is not a zoom");
+    CheckNear(z.value, 1.0f, "and leaves the pose at its own scale");
+    Check(!metroex::ZoomFromFieldsOfView(60.0f, 0.0f).valid, "nor is an unread base");
+    Check(!metroex::ZoomFromFieldsOfView(60.0f, std::numeric_limits<float>::quiet_NaN()).valid,
+          "nor a NaN base");
+}
+
+metroex::HeadPose ZoomTestPose() {
+    metroex::HeadPose p;
+    p.yaw = 20.0f;
+    p.pitch = -10.0f;
+    p.roll = 15.0f;
+    p.x = 0.2f;
+    p.y = -0.1f;
+    p.z = -0.3f;
+    return p;
+}
+
+// Yaw and pitch scale through their tangents, so the image moves as far as it
+// would have at the base field of view. Roll turns the picture by the same angle
+// at any field of view and is left alone.
+void YawPitchAndLeanScaleButRollDoesNot() {
+    constexpr float kDegToRad = 0.01745329252f;
+    const metroex::HeadPose in = ZoomTestPose();
+    const metroex::HeadPose out = metroex::ScalePoseForZoom(in, 0.5f);
+    CheckNear(std::tan(out.yaw * kDegToRad), 0.5f * std::tan(in.yaw * kDegToRad),
+              "yaw scales by the factor through its tangent");
+    CheckNear(std::tan(out.pitch * kDegToRad), 0.5f * std::tan(in.pitch * kDegToRad),
+              "and so does pitch");
+    CheckNear(out.roll, in.roll, "roll does not scale");
+    CheckNear(out.x, in.x * 0.5f, "the lateral lean scales linearly");
+    CheckNear(out.y, in.y * 0.5f, "and the vertical one");
+    CheckNear(out.z, in.z * 0.5f, "and the forward one");
+}
+
+void AFactorOfOneLeavesThePoseAlone() {
+    const metroex::HeadPose in = ZoomTestPose();
+    const metroex::HeadPose out = metroex::ScalePoseForZoom(in, 1.0f);
+    CheckNear(out.yaw, in.yaw, "yaw is unchanged at the base field of view");
+    CheckNear(out.pitch, in.pitch, "and pitch");
+    CheckNear(out.x, in.x, "and the lean");
+}
+
+// Past 90 degrees tan changes sign, so a scaled yaw would flip to the other
+// side. A pose that far round passes through instead.
+void AYawPastNinetyDoesNotFlipSides() {
+    metroex::HeadPose in = ZoomTestPose();
+    in.yaw = 120.0f;
+    CheckNear(metroex::ScalePoseForZoom(in, 0.5f).yaw, 120.0f,
+              "a yaw past 90 passes through rather than flipping to the other side");
+}
+
 }  // namespace
 
 int main() {
@@ -90,6 +163,12 @@ int main() {
     NarrowingTheFieldOfViewNarrowsBothHalfFields();
     AnUndrawnOrImpossibleFrameIsNotAProjection();
     TheEndsOfTheEnginesOwnClampAreProjections();
+    TheZoomFactorIsOneAtTheBase();
+    TheZoomFactorIsTheRatioOfTheHalfFieldTangents();
+    AnUnreadableFieldOfViewIsNoCompensation();
+    YawPitchAndLeanScaleButRollDoesNot();
+    AFactorOfOneLeavesThePoseAlone();
+    AYawPastNinetyDoesNotFlipSides();
 
     return metroex_test::Report();
 }

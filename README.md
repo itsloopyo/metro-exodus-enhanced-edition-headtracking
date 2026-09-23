@@ -117,7 +117,6 @@ Two equivalent binding sets, use whichever your keyboard has:
 | Toggle tracking     | `End`       | `Ctrl+Shift+Y`  |
 | Cycle tracking mode | `Page Up`   | `Ctrl+Shift+G`  |
 | Toggle yaw mode     | `Page Down` | `Ctrl+Shift+H`  |
-| Cycle ADS mode      | `Insert`    | `Ctrl+Shift+U`  |
 
 `Page Up` / `Ctrl+Shift+G` cycles tracking mode: rotation and position, then
 rotation only, then position only, then back to rotation and position.
@@ -134,45 +133,24 @@ rotation only, then position only, then back to rotation and position.
 The switch applies immediately and is not written back to the INI, so the next
 launch starts on whatever `WorldSpaceYaw` says.
 
-`Insert` / `Ctrl+Shift+U` cycles what happens when you aim down sights.
+### Aiming down sights
 
-**None of it runs yet.** The mod cannot tell when your sights are up on either
-known build - the address has not been derived - so head tracking stays on
-through an aim in all three positions. The key still cycles the setting and
-saves it. What each position will do once the sights are detected, all three
-starting the same way by swinging the view onto the point the reticle was
-marking:
+Head tracking stays on while you aim. The weapon stays where your mouse or
+controller points it, so with your head turned it sits off to one side with its
+sights still lined up, and your rounds land where those sights point. Head
+movement is scaled to the zoom, so a scope does not magnify it.
 
-1. **Tracking paused** (default) - the game keeps the camera for as long as the
-   sights are up. The sight picture is exactly the game's, and turning or leaning
-   your head does nothing until you lower the weapon. Tilting it still rolls the
-   view, in this mode and the other two: a tilt does not move your eye off the
-   barrel or the aim off the middle of the screen, so there is nothing to hand
-   back to the gun.
-2. **Tracking on, with an aim marker** - head tracking carries on from the
-   snapped position, and a small white crosshair is drawn wherever your rounds
-   will actually land. This white marker is authoritative, including with scoped
-   weapons. A scope's built-in reticle is only accurate while your eye is
-   exactly aligned with the optic, so the two reticles separate when head
-   tracking moves your view off that sight line.
-3. **Tracking on, no aim marker** - the same as 2 without the marker, for a
-   cleaner screen when you are happy reading the sights themselves.
-
-The choice is saved to `MetroExodusHeadTracking.ini`, so it survives a restart.
-Pressing the key writes the mode it switched to into `HeadTracking.log`.
+Leaning is meant to ease out while the sights are up, because it moves your eye
+off them. The mod cannot yet tell when your sights are up on either known build,
+so for now the lean stays on while you aim.
 
 ### The reticle
 
 While head tracking is running the mod draws its own reticle - a small white
 cross - at the point your rounds are going, and hides the game's crosshair so
 there is one mark on screen rather than two. Turn tracking off with `End`, or
-open the main menu, and the game's own crosshair comes straight back.
-
-Once the sights are detected, the ADS mode will decide it instead: only
-**tracking on, with an aim marker** draws the mark. The other two hand the crosshair back to the game
-for as long as the sights are up, so **tracking paused** gives you the sight
-picture the game would have drawn on its own and **tracking on, no aim marker**
-leaves you reading the sights themselves.
+open the main menu, and the game's own crosshair comes straight back. The mark
+is drawn the same way while you aim down sights.
 
 Two things follow from that, and both are worth knowing before you play:
 
@@ -242,23 +220,11 @@ LimitZBack=0.1
 Toggle=0x23
 CycleMode=0x21
 YawMode=0x22
-AdsMode=0x2D
 ; Chord alternatives: Ctrl+Shift+Y (toggle tracking), Ctrl+Shift+G (cycle
-; mode), Ctrl+Shift+H (yaw mode), Ctrl+Shift+U (cycle ADS mode).
+; mode), Ctrl+Shift+H (yaw mode).
 ChordToggle=1
 ChordCycleMode=1
 ChordYawMode=1
-ChordAdsMode=1
-
-[View]
-; What head tracking does while you are aiming down sights.
-;   paused  - the game keeps the camera until you lower the weapon.
-;   marker  - tracking carries on, and a marker is drawn where your rounds
-;             will land.
-;   tracked - tracking carries on, nothing drawn.
-; Insert cycles the same three in that order and saves the choice back here.
-; Anything else in this key reads as paused.
-AdsMode=paused
 
 [Camera]
 ; Field of view in degrees, the same number the game's own Field of View slider
@@ -339,7 +305,7 @@ the `.prev` one.
   are reading; it costs nothing you can aim or walk into, because the camera the
   game reads is put back clean every frame either way.
 - Detecting that the sights are up is not derived on either known build, so the
-  `Insert` cycle has nothing to act on yet.
+  lean stays on while you aim.
 - If the tracker stops sending, the view holds the last pose it was given rather
   than snapping back. It picks up again when packets resume.
 
@@ -368,6 +334,11 @@ the `.prev` one.
   yaw mode with `Page Down` or `Ctrl+Shift+H`.
 - If an axis moves the wrong way, invert it in the tracker, or set `InvertYaw`,
   `InvertPitch` or `InvertRoll` in the INI.
+
+**The weapon is off to one side when I aim down sights**
+
+- Your head is turned: the weapon stays on your aim and you are looking past it.
+  Turn back to it, or move your aim to where you are looking.
 
 **The game window moved when I launched**
 

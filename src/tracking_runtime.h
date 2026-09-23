@@ -27,17 +27,9 @@ public:
     // Called once per rendered frame. `inGameplay` and `aiming` are this frame's
     // game state, both polled by the caller rather than latched. Fills `out` and
     // returns a verdict for which PoseApplies() is true whenever the pose should
-    // reach the camera; the verdict also carries whether the sights are up, which
-    // is reported in every ADS mode including `paused`.
-    //
-    // The verdict is recomputed here from scratch every frame, so cycling the ADS
-    // mode mid-aim takes effect on that aim rather than the next one.
-    //
-    // `adsMode` is passed in rather than read from the atomic here because the
-    // caller needs the same value for the aim mark. Read twice, a press of the
-    // cycle key landing between the two reads would give one frame whose pose is
-    // in one mode and whose mark is in the next.
-    TrackingState SamplePerFrame(bool inGameplay, bool aiming, AdsMode adsMode, HeadPose& out);
+    // reach the camera. With the sights up the rotation is passed through
+    // untouched and only the lean eases out - see ads.h.
+    TrackingState SamplePerFrame(bool inGameplay, bool aiming, HeadPose& out);
 
     void ToggleEnabled();
     void CycleMode();
@@ -48,14 +40,6 @@ public:
     // choice is not written back to the INI: the config key is the mode the mod
     // starts on, and a session change is a session change.
     void ToggleYawMode();
-
-    // Advances the ADS cycle, saves it, and logs the toast for the mode it
-    // switched to. Called from the hotkey thread.
-    void CycleAdsMode();
-
-    AdsMode GetAdsMode() const {
-        return static_cast<AdsMode>(m_adsMode.load(std::memory_order_acquire));
-    }
 
     bool IsEnabled() const { return m_enabled.load(std::memory_order_relaxed); }
 
@@ -100,16 +84,9 @@ private:
     // thread. Initialised from the config in Start().
     std::atomic<bool> m_worldSpaceYaw{true};
 
-    // Held as an int because AdsMode is an enum class and std::atomic over one
-    // is not lock-free on every toolchain. Written from the hotkey thread, read
-    // once per frame on the render thread.
-    std::atomic<int> m_adsMode{static_cast<int>(kDefaultAdsMode)};
-
-    // Render-thread only. The fade owns the shape of the transition into and out
-    // of the aim; the entry pose is what makes the tracked modes carry on from
-    // where the sights came up rather than from centre.
+    // Render-thread only. Owns the shape of the lean easing out as the sights
+    // come up and back in as they go down.
     AdsFade m_adsFade;
-    AdsEntryPose m_adsEntry;
 
     // Milliseconds accumulated from the frame clock rather than GetTickCount64,
     // whose ~16ms granularity would quantise a 150ms transition into ten steps.

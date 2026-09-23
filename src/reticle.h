@@ -41,15 +41,11 @@ public:
     void Initialise();
 
     // Called once per rendered frame from the camera hook, with the frame that
-    // hook just built and the ADS mode that frame was decided under. Publishes
-    // the mark's position and takes the game's own crosshair off the screen
-    // while the mod owns the aim.
-    //
-    // `mode` is what makes the mark part of the ADS cycle rather than something
-    // that runs underneath it: with the sights up only `marker` draws, and the
-    // other two hand the crosshair back to the game. AimMarkerApplies() in
-    // ads_gate.h is the rule, and this call site is its only caller.
-    void Update(const CameraFrame& frame, const HalfFieldTangents& tangents, AdsMode mode);
+    // hook just built. Publishes the mark's position and takes the game's own
+    // crosshair off the screen while the mod owns the aim. It has no ADS branch:
+    // the sights up or down, the mark is the clean aim projected through the
+    // drawn view.
+    void Update(const CameraFrame& frame, const HalfFieldTangents& tangents);
 
     // Puts the game's crosshair back. Runs at process exit only (the module is
     // pinned - see dllmain.cpp), so it is one guarded store and nothing that can

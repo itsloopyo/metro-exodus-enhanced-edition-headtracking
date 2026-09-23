@@ -120,7 +120,6 @@ DWORD WINAPI InitThread(LPVOID) {
     actions.toggle = [] { g_tracking.ToggleEnabled(); };
     actions.cycleMode = [] { g_tracking.CycleMode(); };
     actions.yawMode = [] { g_tracking.ToggleYawMode(); };
-    actions.adsMode = [] { g_tracking.CycleAdsMode(); };
     g_hotkeys.Start(g_config, std::move(actions));
 
     // Last, because it is the one that can fail on a build the rest of the mod

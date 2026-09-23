@@ -3,6 +3,8 @@
 #include <cmath>
 #include <cstdint>
 
+#include "cameraunlock/camera/zoom_compensation.h"
+
 namespace metroex {
 
 struct Config;
@@ -46,6 +48,30 @@ inline HalfFieldTangents TangentsFromCameraFov(float verticalFovDegrees, float a
     t.x = t.y * aspect;
     t.valid = t.y > 0.0f && t.x > 0.0f && std::isfinite(t.x);
     return t;
+}
+
+// How much narrower the frame being drawn is than the game's un-zoomed one, as
+// the ratio of their half-field tangents. Sights, a scope and a cinematic
+// pull-in all shrink it below 1; ordinary play is exactly 1.
+//
+// Both inputs are the engine's VERTICAL field of view in degrees - the camera
+// field of view is the per-camera coefficient times the live base, the same
+// quantity in the same units - so the ratio needs no aspect term. `valid` is
+// false when either cannot be projected, and `value` is then 1: no
+// compensation rather than a guessed one.
+struct ZoomFactor {
+    float value = 1.0f;
+    bool valid = false;
+};
+
+inline ZoomFactor ZoomFromFieldsOfView(float cameraFovDegrees, float liveBaseFovDegrees) {
+    ZoomFactor z;
+    const HalfFieldTangents now = TangentsFromCameraFov(cameraFovDegrees, 1.0f);
+    const HalfFieldTangents base = TangentsFromCameraFov(liveBaseFovDegrees, 1.0f);
+    if (!now.valid || !base.valid) return z;
+    z.value = cameraunlock::camera::FovZoomFactor(now.y, base.y);
+    z.valid = true;
+    return z;
 }
 
 // Where the mod reads the field of view from, and the one place it writes it.
@@ -112,6 +138,12 @@ public:
     // globals have not been resolved or have not been written yet.
     HalfFieldTangents Tangents() const;
 
+    // This frame's zoom factor. Logs every term of it once, on the first
+    // gameplay frame, so the line a player sends in shows whether ordinary play
+    // reads 1.0000 - a factor that is off by a constant looks exactly like a
+    // right one until then.
+    ZoomFactor Zoom(bool inGameplay);
+
     // Puts the console variable back: the value the override wrote, and the two
     // bounds it widened to get the value past the game's own setter. Safe to call
     // having changed neither.
@@ -159,6 +191,8 @@ private:
     // here on the same thread.
     const volatile float* m_cameraFov = nullptr;
     const volatile float* m_cameraAspect = nullptr;
+    const volatile float* m_liveBaseFov = nullptr;
+    bool m_loggedZoom = false;
 
     // The console variable's own value slot, taken from the variable object
     // rather than pinned separately, so one address routes both the bounds and

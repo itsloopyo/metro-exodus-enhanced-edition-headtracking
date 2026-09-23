@@ -211,7 +211,7 @@ void TestPortFreeToFirstPose(uint16_t port) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1200));
 
     metroex::HeadPose pose;
-    const metroex::TrackingState blocked = rt.SamplePerFrame(true, false, cfg.ads_mode, pose);
+    const metroex::TrackingState blocked = rt.SamplePerFrame(true, false, pose);
     Check(blocked.verdict == metroex::TrackingVerdict::NoTracker,
           "no pose reaches the camera while the port is held");
 
@@ -220,7 +220,7 @@ void TestPortFreeToFirstPose(uint16_t port) {
 
     int elapsed = -1;
     while (ElapsedMs(freed) < 5000) {
-        const metroex::TrackingState state = rt.SamplePerFrame(true, false, cfg.ads_mode, pose);
+        const metroex::TrackingState state = rt.SamplePerFrame(true, false, pose);
         if (state.verdict == metroex::TrackingVerdict::Active) {
             elapsed = ElapsedMs(freed);
             break;

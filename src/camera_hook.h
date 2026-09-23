@@ -19,7 +19,7 @@ struct CameraFrame {
     // tracking is not being applied.
     CameraBasis drawn;
 
-    // The verdict the ADS gate reached for this frame, so a consumer can tell
+    // The verdict the tracking gate reached for this frame, so a consumer can tell
     // "tracking is off" from "there is no tracker" without asking again.
     TrackingState state;
 };

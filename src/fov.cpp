@@ -116,6 +116,19 @@ void FovState::Initialise(const Config& cfg) {
     m_cameraAspect =
         reinterpret_cast<const volatile float*>(build.base + profile.camera_aspect_rva);
 
+    if (profile.live_base_fov_rva == 0) {
+        Log::Line("Zoom: build %s has no live base field of view address; head movement is not "
+                  "scaled to the zoom",
+                  profile.name);
+    } else if (!RvaFits(profile.live_base_fov_rva, sizeof(float), imageSize)) {
+        Log::Line("ERROR: build profile %s puts the live base field of view outside the image; "
+                  "head movement is not scaled to the zoom",
+                  profile.name);
+    } else {
+        m_liveBaseFov =
+            reinterpret_cast<const volatile float*>(build.base + profile.live_base_fov_rva);
+    }
+
     // The console variable is not touched here. See the header: the engine's
     // statics are still being constructed at this point, so the object is read
     // from the frame loop until it is finished.
@@ -338,6 +351,22 @@ void FovState::Update() {
 HalfFieldTangents FovState::Tangents() const {
     if (m_cameraFov == nullptr || m_cameraAspect == nullptr) return {};
     return TangentsFromCameraFov(*m_cameraFov, *m_cameraAspect);
+}
+
+ZoomFactor FovState::Zoom(bool inGameplay) {
+    if (m_cameraFov == nullptr || m_liveBaseFov == nullptr) return {};
+    const float cameraFov = *m_cameraFov;
+    const float liveBase = *m_liveBaseFov;
+    const ZoomFactor zoom = ZoomFromFieldsOfView(cameraFov, liveBase);
+    if (inGameplay && !m_loggedZoom) {
+        m_loggedZoom = true;
+        Log::Line("Zoom: camera field of view %.3f deg vertical, live base %.3f deg vertical, "
+                  "aspect %.5f (not used: both are vertical), factor %.4f%s",
+                  static_cast<double>(cameraFov), static_cast<double>(liveBase),
+                  static_cast<double>(*m_cameraAspect), static_cast<double>(zoom.value),
+                  zoom.valid ? "" : " - unreadable, so head movement is not scaled");
+    }
+    return zoom;
 }
 
 }  // namespace metroex

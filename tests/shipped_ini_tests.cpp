@@ -184,10 +184,8 @@ void TheManifestSeedsTheSameIni() {
 // identical. What a player loses is a documented knob they can no longer find in
 // their own config, with nothing saying where it went.
 void TheGeneratedFileCarriesEveryKeyTheReaderLooksFor() {
-    // Section-qualified, because AdsMode is read from two of them: [Hotkeys]
-    // carries the key code and [View] carries the mode. An unqualified search
-    // would let either stand in for the other, and the one that matters is the
-    // one Insert writes back to.
+    // Section-qualified, so a key of the same name in another section cannot
+    // stand in for it.
     struct Key {
         const char* section;
         const char* key;
@@ -205,10 +203,9 @@ void TheGeneratedFileCarriesEveryKeyTheReaderLooksFor() {
         {"Position", "LimitYDown"},       {"Position", "LimitZ"},
         {"Position", "LimitZBack"},
         {"Hotkeys", "Toggle"},            {"Hotkeys", "CycleMode"},
-        {"Hotkeys", "YawMode"},           {"Hotkeys", "AdsMode"},
+        {"Hotkeys", "YawMode"},
         {"Hotkeys", "ChordToggle"},       {"Hotkeys", "ChordCycleMode"},
-        {"Hotkeys", "ChordYawMode"},      {"Hotkeys", "ChordAdsMode"},
-        {"View", "AdsMode"},
+        {"Hotkeys", "ChordYawMode"},
         {"Camera", "FieldOfView"},        {"Camera", "Discovery"},
     };
 

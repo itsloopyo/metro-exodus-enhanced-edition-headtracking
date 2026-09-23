@@ -16,7 +16,6 @@ public:
         Action toggle;
         Action cycleMode;
         Action yawMode;
-        Action adsMode;
     };
 
     bool Start(const Config& cfg, Actions actions);

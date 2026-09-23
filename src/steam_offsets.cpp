@@ -42,6 +42,11 @@ namespace metroex {
 //                      the horizontal half-field tangent by exactly this, which
 //                      is what pins the field of view above as VERTICAL and the
 //                      engine as Hor+.
+//
+//   live_base_fov_rva  The base field of view camera_fov_rva multiplies. One
+//                      instruction in .text writes it, a movss in the easing
+//                      function; read live beside the console variable's value
+//                      slot, 60.0 on both.
 extern const BuildProfile kSteamProfile_20260803 = {
     "steam-win64-20260803",
 
@@ -58,6 +63,7 @@ extern const BuildProfile kSteamProfile_20260803 = {
 
     0x01703884,  // camera_fov_rva
     0x01703888,  // camera_aspect_rva
+    0x015AD820,  // live_base_fov_rva
 
     0,  // camera_block_rva - not derived
     0,  // view_builder_rva - not derived
@@ -109,6 +115,11 @@ extern const BuildProfile kSteamProfile_20260803 = {
 //                      to 90.000 within half a second, and putting them back
 //                      snapped it to 60.
 //
+//   live_base_fov_rva  The same address as the build above, decoded from this
+//                      EXE's bytes: the movss at 0x140581F53, 0x39 past the
+//                      pin, stores xmm1 to RIP+0x0102B8C5, which is RVA
+//                      0x015AD820.
+//
 //   view_builder_rva   The function both publishers tail-call once the block's
 //                      position, basis and projection are written. It builds
 //                      the double-precision view matrix at +0x100, multiplies
@@ -133,6 +144,7 @@ extern const BuildProfile kSteamProfile_20260827 = {
 
     0x01703884,  // camera_fov_rva
     0x01703888,  // camera_aspect_rva
+    0x015AD820,  // live_base_fov_rva
 
     0x017033D0,  // camera_block_rva
     0x005C8CB0,  // view_builder_rva

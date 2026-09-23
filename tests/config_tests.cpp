@@ -59,50 +59,22 @@ void LimitYReachesBothBoundsWhenLimitYDownIsAbsent() {
     CheckNear(tightened.pos_limit_y_down, 0.05f, "LimitY=0.05 lowers the downward bound too");
 }
 
-// The ADS mode is the player's choice, made from a key or by hand, and the one
-// setting the mod writes back itself. An absent key, a typo and a mode renamed
-// since an older release wrote the file all have to land on the default rather
-// than on head tracking through the sights that nobody asked for.
-void AdsModeDefaultsToPausedAndValidatesTheRest() {
-    metroex::Config absent;
-    absent.LoadOrCreate(WriteIni("ads_absent", "[Position]\nLimitY=0.20\n").c_str());
-    Check(absent.ads_mode == metroex::kDefaultAdsMode, "an absent AdsMode is the default");
-    Check(absent.ads_mode == metroex::AdsMode::Paused, "and the default is paused");
-
-    metroex::Config typo;
-    typo.LoadOrCreate(WriteIni("ads_typo", "[View]\nAdsMode=sights\n").c_str());
-    Check(typo.ads_mode == metroex::AdsMode::Paused, "an unknown AdsMode falls back to paused");
-
-    metroex::Config tracked;
-    tracked.LoadOrCreate(WriteIni("ads_tracked", "[View]\nAdsMode=tracked\n").c_str());
-    Check(tracked.ads_mode == metroex::AdsMode::Tracked, "a known AdsMode is read");
-
-    metroex::Config marker;
-    marker.LoadOrCreate(WriteIni("ads_marker", "[View]\nAdsMode=marker\n").c_str());
-    Check(marker.ads_mode == metroex::AdsMode::Marker,
-          "including marker, which this game ships because it has no ADS reticle to move");
+// An INI written by an older release still carries the retired ADS cycle: its
+// key and chord under [Hotkeys] and the mode under [View]. It has to load
+// exactly as a file without them does, with nothing refused.
+void AConfigCarryingTheRetiredAdsCycleLoadsCleanly() {
+    metroex::Config old;
+    Check(old.LoadOrCreate(WriteIni("ads_retired", "[Hotkeys]\nAdsMode=0x2D\nChordAdsMode=1\n"
+                                                   "[View]\nAdsMode=marker\n"
+                                                   "[Position]\nLimitY=0.35\n")
+                               .c_str()),
+          "a config still carrying the ADS keys loads");
+    CheckNear(old.pos_limit_y, 0.35f, "and the rest of it is read as written");
 }
 
-// Pressing the key has to survive a restart, and it must not cost the player the
-// rest of their config: the writer changes one key of the existing file.
-void SaveAdsModeRoundTripsWithoutLosingTheFile() {
-    const std::string path = WriteIni("ads_save", "[View]\nAdsMode=paused\n"
-                                                  "[Position]\nLimitY=0.35\n");
-    metroex::Config first;
-    first.LoadOrCreate(path.c_str());
-    first.SaveAdsMode(metroex::AdsMode::Marker);
-
-    metroex::Config reloaded;
-    reloaded.LoadOrCreate(path.c_str());
-    Check(reloaded.ads_mode == metroex::AdsMode::Marker, "the saved AdsMode is read back");
-    CheckNear(reloaded.pos_limit_y, 0.35f, "and the rest of the file survived the write");
-}
-
-void TheAdsKeyIsInsertAndTheChordIsOn() {
+void TheNavBindingsAreUnchanged() {
     metroex::Config cfg;
-    cfg.LoadOrCreate(WriteIni("ads_keys", "[Position]\nLimitY=0.20\n").c_str());
-    Check(cfg.vk_ads_mode == 0x2D, "the ADS cycle is on Insert");
-    Check(cfg.chord_ads_mode, "and its Ctrl+Shift+U chord is on");
+    cfg.LoadOrCreate(WriteIni("nav_keys", "[Position]\nLimitY=0.20\n").c_str());
     Check(cfg.vk_toggle == 0x23, "the toggle stays on End");
     Check(cfg.vk_cycle_mode == 0x21, "and the tracking-mode cycle stays on Page Up");
 }
@@ -196,22 +168,6 @@ void ABoolWithATrailingCommentIsHonouredRatherThanDropped() {
     Check(nonsense.position_enabled, "a word this reader has no meaning for falls back");
 }
 
-// An AdsMode that differs only in case is accepted, so it must not be reported
-// as refused - the log line would name the mode the player asked for as the one
-// it fell back to.
-void AnAdsModeIsMatchedWithoutRegardToCase() {
-    metroex::Config mixed;
-    mixed.LoadOrCreate(WriteIni("ads_case", "[View]\nAdsMode=Tracked\n").c_str());
-    Check(mixed.ads_mode == metroex::AdsMode::Tracked,
-          "AdsMode=Tracked is the tracked mode, not a typo");
-
-    metroex::Config commented;
-    commented.LoadOrCreate(
-        WriteIni("ads_comment", "[View]\nAdsMode=marker ; draw the mark\n").c_str());
-    Check(commented.ads_mode == metroex::AdsMode::Marker,
-          "and a trailing comment does not turn it back into the default");
-}
-
 void MalformedNumbersFallBackInsteadOfReachingTheCamera() {
     metroex::Config notFinite;
     notFinite.LoadOrCreate(WriteIni("guard_nan", "[Sensitivity]\nYaw=nan\n").c_str());
@@ -276,12 +232,9 @@ void TheGeneratedDefaultFileParsesBackAsTheStructDefaults() {
     Check(written.vk_toggle == expected.vk_toggle, "the toggle key round-trips");
     Check(written.vk_cycle_mode == expected.vk_cycle_mode, "the mode cycle key round-trips");
     Check(written.vk_yaw_mode == expected.vk_yaw_mode, "the yaw mode key round-trips");
-    Check(written.vk_ads_mode == expected.vk_ads_mode, "the ADS cycle key round-trips");
     Check(written.chord_toggle == expected.chord_toggle, "ChordToggle round-trips");
     Check(written.chord_cycle_mode == expected.chord_cycle_mode, "ChordCycleMode round-trips");
     Check(written.chord_yaw_mode == expected.chord_yaw_mode, "ChordYawMode round-trips");
-    Check(written.chord_ads_mode == expected.chord_ads_mode, "ChordAdsMode round-trips");
-    Check(written.ads_mode == expected.ads_mode, "AdsMode round-trips");
     CheckNear(written.fov_override, expected.fov_override, "FieldOfView round-trips");
     Check(written.discovery == expected.discovery, "Discovery round-trips");
 }
@@ -340,11 +293,9 @@ int main() {
     FieldOfViewIsOffByDefaultAndRefusesValuesOutsideItsRange();
     AnExplicitLimitYDownStillWins();
     ABoolWithATrailingCommentIsHonouredRatherThanDropped();
-    AnAdsModeIsMatchedWithoutRegardToCase();
     MalformedNumbersFallBackInsteadOfReachingTheCamera();
-    AdsModeDefaultsToPausedAndValidatesTheRest();
-    SaveAdsModeRoundTripsWithoutLosingTheFile();
-    TheAdsKeyIsInsertAndTheChordIsOn();
+    AConfigCarryingTheRetiredAdsCycleLoadsCleanly();
+    TheNavBindingsAreUnchanged();
     YawModeDefaultsToWorldSpaceAndSitsOnPageDown();
     TheGeneratedDefaultFileParsesBackAsTheStructDefaults();
     ThePortIsHeldToTheUnprivilegedRange();

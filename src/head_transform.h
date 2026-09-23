@@ -1,6 +1,9 @@
 #pragma once
 
+#include "cameraunlock/camera/zoom_compensation.h"
 #include "cameraunlock/math/vec3.h"
+
+#include <cmath>
 
 namespace metroex {
 
@@ -45,6 +48,30 @@ struct EngineHeadPose {
     float y = 0.0f;
     float z = 0.0f;
 };
+
+// The pose scaled so a head movement displaces the picture as far as it would at
+// the game's un-zoomed field of view. Yaw, pitch and the lean translate the
+// image and scale; roll rotates it about the view axis by the same angle at any
+// field of view and is left alone. `factor` comes from ZoomFromFieldsOfView and
+// is exactly 1 in ordinary play.
+inline HeadPose ScalePoseForZoom(const HeadPose& pose, float factor) {
+    // ScaleAngleForZoom goes through tan, which changes sign past 90 degrees. A
+    // tracker profile that maps the head past 90 is looking behind the camera,
+    // where there is no image displacement to hold constant, so it passes
+    // through - and the scaled angle already tends to 90 as it gets there.
+    const auto scaleAngle = [factor](float degrees) {
+        return std::fabs(degrees) < 90.0f
+                   ? cameraunlock::camera::ScaleAngleForZoom(degrees, factor)
+                   : degrees;
+    };
+    HeadPose out = pose;
+    out.yaw = scaleAngle(pose.yaw);
+    out.pitch = scaleAngle(pose.pitch);
+    out.x *= factor;
+    out.y *= factor;
+    out.z *= factor;
+    return out;
+}
 
 // The one place a tracker sign becomes an engine sign. Yaw, pitch, roll and the
 // vertical lean pass through; the lateral and forward leans are negated.

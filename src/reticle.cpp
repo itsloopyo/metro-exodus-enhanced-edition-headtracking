@@ -229,21 +229,18 @@ void Reticle::Initialise() {
     g_resolveDeadlineMs = GetTickCount64() + kCvarResolveWindowMs;
 }
 
-void Reticle::Update(const CameraFrame& frame, const HalfFieldTangents& tangents, AdsMode mode) {
+void Reticle::Update(const CameraFrame& frame, const HalfFieldTangents& tangents) {
     // Without the crosshair switch there is no way to take the game's own mark
     // off the screen, and two marks are worse than the stock one alone.
     if (!CrosshairSwitchReady()) return;
 
-    // Recomputed here every frame rather than carried over, so the sights coming
-    // up, the sights going down and a mid-aim press of the cycle key all land on
-    // the frame they happen on. With the sights up this is what separates
-    // `marker` from the two modes that draw nothing.
+    // Recomputed here every frame rather than carried over, so tracking coming
+    // on or off lands on the frame it happens on.
     // The player's own crosshair setting decides whether the mod draws at all.
     // With it off there is no mark to replace, and putting one on screen is not
     // this mod's decision to make. Taken from SetGameCrosshair's latch rather
     // than from the resolve, so switching it off mid-session takes effect.
-    if (!AimMarkerApplies(frame.state.verdict, frame.state.aiming, mode) ||
-        g_gameCrosshairOn == 0) {
+    if (!PoseApplies(frame.state.verdict) || g_gameCrosshairOn == 0) {
         g_marker.Publish(false, 0.0f, 0.0f);
         SetGameCrosshair(true);
         return;

@@ -1,9 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
-
-#include "ads.h"
 
 #include "cameraunlock/effects/head_follow_light.h"
 #include "cameraunlock/data/position_settings.h"
@@ -44,7 +41,6 @@ constexpr float kPositionSensitivity = 1.0f;
 constexpr int kVkToggle = 0x23;      // VK_END
 constexpr int kVkCycleMode = 0x21;   // VK_PRIOR (Page Up)
 constexpr int kVkYawMode = 0x22;     // VK_NEXT (Page Down)
-constexpr int kVkAdsMode = 0x2D;     // VK_INSERT
 constexpr bool kChordEnabled = true;
 
 // 0 is the off switch, not a field of view.
@@ -92,16 +88,9 @@ struct Config {
     int vk_toggle = defaults::kVkToggle;
     int vk_cycle_mode = defaults::kVkCycleMode;
     int vk_yaw_mode = defaults::kVkYawMode;
-    int vk_ads_mode = defaults::kVkAdsMode;
     bool chord_toggle = defaults::kChordEnabled;
     bool chord_cycle_mode = defaults::kChordEnabled;
     bool chord_yaw_mode = defaults::kChordEnabled;
-    bool chord_ads_mode = defaults::kChordEnabled;
-
-    // What head tracking does while the sights are up. The cycle, its value
-    // strings and its default live in cameraunlock-core; see ads.h for why this
-    // game gets all three slots.
-    AdsMode ads_mode = kDefaultAdsMode;
 
     // Field of view in degrees, or 0 to leave the game's own setting alone.
     //
@@ -124,16 +113,7 @@ struct Config {
     // an hour, so it is opt-in.
     bool discovery = defaults::kDiscovery;
 
-    // Where LoadOrCreate() read this config from. SaveAdsMode() writes back to
-    // it, so the player's ADS choice survives a restart.
-    std::string ini_path;
-
     bool LoadOrCreate(const char* iniPath);
-
-    // Writes just AdsMode back, leaving every other key and every comment in the
-    // file alone. IniWriter truncates, so writing through it would throw the
-    // rest of the player's config away.
-    void SaveAdsMode(AdsMode mode) const;
 };
 
 }

@@ -92,8 +92,8 @@ struct BuildProfile {
 
     // Byte, non-zero while the player has the sights up. Read once per frame by
     // AdsState; see ads_state.h for why the flag rather than the view's zoom.
-    // Zero leaves the sights undetected, which switches the ADS mode cycle off
-    // rather than guessing at it.
+    // Zero leaves the sights undetected, so the lean is never eased out while
+    // aiming, rather than guessing at it.
     uint32_t ads_flag_rva;
 
     // The vertical field of view, in degrees, of the frame being drawn, and the
@@ -103,6 +103,14 @@ struct BuildProfile {
     // looking at rather than any setting - see fov.h.
     uint32_t camera_fov_rva;
     uint32_t camera_aspect_rva;
+
+    // The live base field of view, vertical degrees: the number the camera field
+    // of view above is the per-camera coefficient times. The engine eases it
+    // toward its target once per frame, and the one instruction that writes it
+    // sits in the same function as base_fov_pin_rva. It is the un-zoomed
+    // reference zoom compensation divides by, so sights, a scope or a cinematic
+    // pull-in move the camera field of view off it and nothing else does.
+    uint32_t live_base_fov_rva;
 
     // The published camera block, and the engine function that rebuilds
     // everything derived from it.

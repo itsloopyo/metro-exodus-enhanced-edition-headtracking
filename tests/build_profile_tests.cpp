@@ -113,6 +113,8 @@ void TheNewestProfileCarriesEachAddressOnItsOwnField() {
     Check(p.ads_flag_rva == 0u, "ads_flag_rva has not been derived on any build yet");
     Check(p.camera_fov_rva == 0x01703884u, "camera_fov_rva is the drawn vertical field of view");
     Check(p.camera_aspect_rva == 0x01703888u, "camera_aspect_rva is the horizontal multiplier");
+    Check(p.live_base_fov_rva == 0x015AD820u,
+          "live_base_fov_rva is the base the camera field of view is scaled from");
     Check(p.camera_block_rva == 0x017033D0u, "camera_block_rva is the published camera block");
     Check(p.view_builder_rva == 0x005C8CB0u, "view_builder_rva is in the code section, not data");
     Check(p.base_fov_cvar_rva == 0x02FE67E8u, "base_fov_cvar_rva is the console-variable object");

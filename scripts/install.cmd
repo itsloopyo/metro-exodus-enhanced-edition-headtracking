@@ -42,7 +42,7 @@ set "MOD_SEED_FILES=MetroExodusHeadTracking.ini"
 :: omit the field. Bump alongside vendor/ via `pixi run update-deps`.
 set "ASI_LOADER_VERSION=9.7.4"
 :: Post-install help text. `&echo ` starts each further line.
-set "MOD_CONTROLS=Controls:&echo   End       - Toggle head tracking on/off&echo   Page Up   - Cycle mode: rotation and position, rotation only, position only&echo   Page Down - Toggle yaw mode: world up-axis, camera up-axis&echo   Insert    - Cycle ADS mode: tracking paused, aim marker shown, no aim marker&echo   Ctrl+Shift+Y / Ctrl+Shift+G / Ctrl+Shift+H / Ctrl+Shift+U - the same four, for keyboards without a nav cluster"
+set "MOD_CONTROLS=Controls:&echo   End       - Toggle head tracking on/off&echo   Page Up   - Cycle mode: rotation and position, rotation only, position only&echo   Page Down - Toggle yaw mode: world up-axis, camera up-axis&echo   Ctrl+Shift+Y / Ctrl+Shift+G / Ctrl+Shift+H - the same three, for keyboards without a nav cluster"
 :: --- END CONFIG BLOCK ---
 
 :: Pin delayed expansion off before `%*` is expanded on the `call` below.

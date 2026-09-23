@@ -74,9 +74,6 @@ void TrackingRuntime::Start(const Config& cfg) {
     m_worldSpaceYaw.store(m_cfg.world_space_yaw, std::memory_order_relaxed);
     Log::Line("Yaw axis: %s", YawAxisName(m_cfg.world_space_yaw));
 
-    m_adsMode.store(static_cast<int>(m_cfg.ads_mode), std::memory_order_release);
-    Log::Line("[ads] %s", AdsModeToast(m_cfg.ads_mode));
-
     m_enabled.store(m_cfg.enabled_on_startup, std::memory_order_release);
 }
 
@@ -106,19 +103,7 @@ void TrackingRuntime::CycleMode() {
     Log::Line("Tracking mode: cycle requested; it applies on the next frame the mod draws");
 }
 
-void TrackingRuntime::CycleAdsMode() {
-    const AdsMode next = NextAdsMode(GetAdsMode());
-    m_adsMode.store(static_cast<int>(next), std::memory_order_release);
-    m_cfg.SaveAdsMode(next);
-    // The camera hook reads this atomic at the top of the very next frame and
-    // hands it to both SamplePerFrame() and the aim mark, and the verdict is
-    // decided from scratch there, so a change made mid-aim lands on that aim
-    // rather than on the next one.
-    Log::Line("[ads] %s", AdsModeToast(next));
-}
-
-TrackingState TrackingRuntime::SamplePerFrame(bool inGameplay, bool aiming, AdsMode adsMode,
-                                              HeadPose& out) {
+TrackingState TrackingRuntime::SamplePerFrame(bool inGameplay, bool aiming, HeadPose& out) {
     out = HeadPose{};
 
     // Ticked unconditionally, so the transition keeps its own clock while the
@@ -150,9 +135,8 @@ TrackingState TrackingRuntime::SamplePerFrame(bool inGameplay, bool aiming, AdsM
     // again when the face is re-acquired. The session's own Update() answers
     // false until the first packet ever arrives and holds the last pose after
     // that, which is exactly the "hold, never snap" the doctrine asks for.
-    AdsEntryPose::Pose absolute;
+    HeadPose absolute;
     bool live = false;
-    bool havePosition = false;
     if (enabled && m_session.Update(dt)) {
         // Update() re-reads the receiver connection locality every frame, so
         // switching between a local OpenTrack instance and a phone on WiFi picks
@@ -160,48 +144,23 @@ TrackingState TrackingRuntime::SamplePerFrame(bool inGameplay, bool aiming, AdsM
         LogConnectionLocality();
         if (m_session.GetRotation(absolute.yaw, absolute.pitch, absolute.roll)) {
             live = true;
-            havePosition = m_session.GetPositionOffset(absolute.x, absolute.y, absolute.z);
+            absolute.has_position =
+                m_session.GetPositionOffset(absolute.x, absolute.y, absolute.z);
         }
     }
 
-    const TrackingState state = DecideTracking(enabled, inGameplay, live, aiming, adsMode);
+    const TrackingState state = DecideTracking(enabled, inGameplay, live, aiming);
 
     if (!PoseApplies(state.verdict)) {
-        // The entry pose goes on every suppressed frame, so an aim that resumes
-        // re-captures where the head is now rather than resuming against a pose
-        // from before the menu.
-        m_adsEntry.Reset();
-        // The TRANSITION only goes when the sights are down. Resetting it while
-        // they are up puts the fade back at the hip, and the frame the
-        // suppression lifts on then hands the camera the player's whole head
-        // angle for one frame before easing back onto the gun - the jolt the
-        // fade exists to remove, delivered by its caller.
+        // Only when the sights are down. Resetting while they are up puts the
+        // fade back at the hip, and the frame the suppression lifts on would
+        // then hand the camera the whole lean for one frame before easing it
+        // back out.
         if (!aiming) m_adsFade.Reset();
         return state;
     }
 
-    // `aiming` is the game's own state, never the verdict: in `paused` the gate
-    // reports AdsSuspended precisely because the sights are up, so feeding that
-    // back would make the fade chase itself.
-    const float scale = m_adsFade.Update(aiming, nowMs);
-    const AdsEntryPose::Pose relative = m_adsEntry.Relative(aiming, live, absolute);
-    const AdsEntryPose::Pose blended = BlendAdsPose(adsMode, scale, absolute, relative);
-
-    // Re-clamped, because the relative pose is a DIFFERENCE of two already
-    // clamped poses and so reaches twice the limit: lean 0.30m forward, raise the
-    // sights, lean 0.10m back and the relative z is +0.40, four times the 0.10
-    // that stops the eye backing through the player model.
-    const cameraunlock::math::Vec3 bounded =
-        m_session.GetPositionProcessor().ClampToLimits(
-            cameraunlock::math::Vec3(blended.x, blended.y, blended.z));
-
-    out.yaw = blended.yaw;
-    out.pitch = blended.pitch;
-    out.roll = blended.roll;
-    out.x = bounded.x;
-    out.y = bounded.y;
-    out.z = bounded.z;
-    out.has_position = havePosition;
+    out = EaseLeanForSights(absolute, m_adsFade.Update(state.aiming, nowMs));
     return state;
 }
 

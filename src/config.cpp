@@ -6,6 +6,7 @@
 #include "cameraunlock/config/value_guards.h"
 
 #include <cctype>
+#include <string>
 
 #include <windows.h>
 
@@ -155,37 +156,11 @@ void ReadHotkeysSection(const cameraunlock::IniReader& ini, Config& cfg) {
     cfg.vk_toggle = ReadHotkey(ini, "Toggle", defaults::kVkToggle);
     cfg.vk_cycle_mode = ReadHotkey(ini, "CycleMode", defaults::kVkCycleMode);
     cfg.vk_yaw_mode = ReadHotkey(ini, "YawMode", defaults::kVkYawMode);
-    cfg.vk_ads_mode = ReadHotkey(ini, "AdsMode", defaults::kVkAdsMode);
     cfg.chord_toggle = ReadBoolChecked(ini, "Hotkeys", "ChordToggle", defaults::kChordEnabled);
     cfg.chord_cycle_mode =
         ReadBoolChecked(ini, "Hotkeys", "ChordCycleMode", defaults::kChordEnabled);
     cfg.chord_yaw_mode =
         ReadBoolChecked(ini, "Hotkeys", "ChordYawMode", defaults::kChordEnabled);
-    cfg.chord_ads_mode =
-        ReadBoolChecked(ini, "Hotkeys", "ChordAdsMode", defaults::kChordEnabled);
-}
-
-void ReadViewSection(const cameraunlock::IniReader& ini, Config& cfg) {
-    // ParseAdsMode answers with the default for anything that is not one of the
-    // three values, rather than falling through to whichever branch is last.
-    // That covers a typo in a hand-edited file, a key this release has not
-    // written yet, and a mode renamed since an older release wrote the file: all
-    // three land the player on stock ADS rather than on head tracking through
-    // their sights that they never asked for.
-    std::string raw = cameraunlock::config::ReadRawValue(ini, "View", "AdsMode");
-    cfg.ads_mode = ParseAdsMode(raw.empty() ? AdsModeValue(kDefaultAdsMode) : raw.c_str());
-    if (raw.empty()) return;
-    // Folded before comparing, because ParseAdsMode folds too: `AdsMode=Tracked`
-    // is accepted and honoured, and reporting it as refused would name the mode
-    // the player asked for as the one it fell back to.
-    for (char& c : raw) {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-    if (raw != AdsModeValue(cfg.ads_mode)) {
-        Log::Line("config: [View] AdsMode=%s is not one of paused, marker or tracked, so %s is "
-                  "used instead",
-                  raw.c_str(), AdsModeValue(cfg.ads_mode));
-    }
 }
 
 // False when FieldOfView is neither the off switch nor inside the accepted
@@ -288,28 +263,11 @@ void WriteHotkeysSection(cameraunlock::IniWriter& w) {
     w.WriteHex("CycleMode", defaults::kVkCycleMode);
     w.WriteComment(" Page Down switches yaw between the world up-axis and the camera's own.");
     w.WriteHex("YawMode", defaults::kVkYawMode);
-    w.WriteComment(" Insert cycles what head tracking does while the sights are up.");
-    w.WriteHex("AdsMode", defaults::kVkAdsMode);
     w.WriteComment(" Chord alternatives: Ctrl+Shift+Y (toggle tracking),");
-    w.WriteComment(" Ctrl+Shift+G (cycle mode), Ctrl+Shift+H (yaw mode),");
-    w.WriteComment(" Ctrl+Shift+U (cycle ADS mode).");
+    w.WriteComment(" Ctrl+Shift+G (cycle mode), Ctrl+Shift+H (yaw mode).");
     w.WriteBool("ChordToggle", defaults::kChordEnabled);
     w.WriteBool("ChordCycleMode", defaults::kChordEnabled);
     w.WriteBool("ChordYawMode", defaults::kChordEnabled);
-    w.WriteBool("ChordAdsMode", defaults::kChordEnabled);
-}
-
-void WriteViewSection(cameraunlock::IniWriter& w) {
-    w.WriteBlankLine();
-    w.WriteSection("View");
-    w.WriteComment(" What head tracking does while you are aiming down sights.");
-    w.WriteComment("   paused  - the game keeps the camera until you lower the weapon.");
-    w.WriteComment("   marker  - tracking carries on, and a marker is drawn where");
-    w.WriteComment("             your rounds will land.");
-    w.WriteComment("   tracked - tracking carries on, nothing drawn.");
-    w.WriteComment(" Insert cycles the same three in that order and saves the choice");
-    w.WriteComment(" back here. Anything else in this key reads as paused.");
-    w.WriteString("AdsMode", AdsModeValue(kDefaultAdsMode));
 }
 
 void WriteCameraSection(cameraunlock::IniWriter& w) {
@@ -364,7 +322,6 @@ bool WriteDefaultIni(const char* path) {
     WriteSmoothingSection(w);
     WritePositionSection(w);
     WriteHotkeysSection(w);
-    WriteViewSection(w);
     WriteCameraSection(w);
     WriteLightSection(w);
     w.Close();
@@ -373,24 +330,7 @@ bool WriteDefaultIni(const char* path) {
 
 }  // namespace
 
-// GetPrivateProfileString's writer half is the only thing here that can change
-// one key of an existing file. A file that is not there yet gets just this
-// section, and the next launch fills the rest in.
-void Config::SaveAdsMode(AdsMode mode) const {
-    if (ini_path.empty()) {
-        Log::Line("ERROR: no INI path to save AdsMode to; the setting applies for this session "
-                  "but will not survive a restart");
-        return;
-    }
-    if (!WritePrivateProfileStringA("View", "AdsMode", AdsModeValue(mode), ini_path.c_str())) {
-        Log::Line("ERROR: could not save AdsMode to %s (error %lu); the setting applies for this "
-                  "session but will not survive a restart",
-                  ini_path.c_str(), GetLastError());
-    }
-}
-
 bool Config::LoadOrCreate(const char* iniPath) {
-    ini_path = iniPath;
     if (!FileExists(iniPath)) {
         if (!WriteDefaultIni(iniPath)) {
             Log::Line("ERROR: Could not write default INI: %s", iniPath);
@@ -409,7 +349,6 @@ bool Config::LoadOrCreate(const char* iniPath) {
     ReadSmoothingSection(ini, *this);
     ReadPositionSection(ini, *this);
     ReadHotkeysSection(ini, *this);
-    ReadViewSection(ini, *this);
     return ReadCameraSection(ini, *this);
 }
 

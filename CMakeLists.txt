@@ -160,11 +160,10 @@ target_compile_definitions(metroex_shipped_ini_tests PRIVATE
     METROEX_SHIPPED_INI="${CMAKE_CURRENT_SOURCE_DIR}/MetroExodusHeadTracking.ini"
     METROEX_LAUNCHER_MANIFEST="${CMAKE_CURRENT_SOURCE_DIR}/launcher-manifest.json")
 
-# The ADS cycle: the pose the camera is fed while the sights are up, and the
-# verdict walk that decides whether it reaches the view at all. Both are pure
-# functions over the shared module in cameraunlock-core, so neither needs the
-# game or a hook.
-add_metroex_test(metroex_ads_pose_tests tests/ads_pose_tests.cpp)
+# The lean easing out while the sights are up, and the verdict walk that decides
+# whether the pose reaches the view at all. Both are pure functions, so neither
+# needs the game or a hook.
+add_metroex_test(metroex_ads_lean_tests tests/ads_lean_tests.cpp)
 add_metroex_test(metroex_ads_gate_tests tests/ads_gate_tests.cpp)
 
 # The projection the reticle is drawn with, over the camera composition the
