@@ -8,7 +8,7 @@ An unofficial head tracking mod for Metro Exodus Enhanced Edition that moves the
 
 - **Decoupled look and aim** - head tracking moves the view; your shots still go where the mouse or controller points.
 - **6DOF positional tracking** - lean and peek with head position, not just rotation.
-- **Works with any OpenTrack-compatible source** - webcam, phone app, or anything else that sends the OpenTrack UDP protocol
+- **Works with any OpenTrack compatible tracker** - free options available for PC, iOS and Android
 
 ## Requirements
 
@@ -17,6 +17,13 @@ An unofficial head tracking mod for Metro Exodus Enhanced Edition that moves the
 - Windows 10 or 11, 64-bit.
 
 ## Installation
+
+### Lopari
+
+Download [Lopari](https://lopari.app), choose **Metro Exodus Enhanced Edition**, and click
+**Play with head tracking**.
+
+### Standalone Installer
 
 1. Download the installer ZIP from the [Releases](https://github.com/itsloopyo/metro-exodus-enhanced-edition-headtracking/releases) page.
 2. Extract it anywhere.
