@@ -24,3 +24,6 @@
 *.exe binary
 *.pdb binary
 *.lib binary
+
+# Differential test inputs are byte-exact player files: CRLF, and whatever else a build wrote.
+tests/config_differential/inputs/** -text
