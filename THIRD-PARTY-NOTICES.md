@@ -18,7 +18,7 @@ source, and what it did not, is set out in the closing section.
 | injector | `3a384e8` (inside Ultimate ASI Loader v9.7.4) | zlib | Not compiled in; credited as the repository the two entries above and the loader's MinHook come from |
 | miniz | 3.0.0 (inside Ultimate ASI Loader v9.7.4) | MIT | Compiled into the vendored dinput8.dll |
 | MinHook | `c19241d4` (v1.3.4-1-gc19241d) in the .asi, `d94c64d3` (v1.3.4-14-gd94c64d) in the loader | BSD-2-Clause | Compiled into `MetroExodusHeadTracking.asi` and into the vendored dinput8.dll |
-| cameraunlock-core | 26b4f175a568b985eb56d3538d8cffee13aee506 | MIT | Compiled into `MetroExodusHeadTracking.asi` |
+| cameraunlock-core | befb88eef8bf0c8238d49b1e4d709578052d5590 | MIT | Compiled into `MetroExodusHeadTracking.asi` |
 | OpenTrack | n/a | ISC | Not bundled; UDP protocol interoperability only |
 
 ---
@@ -345,7 +345,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## cameraunlock-core
 
-- **Version:** `26b4f175a568b985eb56d3538d8cffee13aee506`
+- **Version:** `befb88eef8bf0c8238d49b1e4d709578052d5590`
 - **License:** `MIT`
 - **Upstream:** https://github.com/itsloopyo/cameraunlock-core
 - **Usage:** Shared CameraUnlock tracking library (protocol, pose processing, camera maths), compiled into `MetroExodusHeadTracking.asi`.
