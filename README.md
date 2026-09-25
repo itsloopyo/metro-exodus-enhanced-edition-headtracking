@@ -285,6 +285,10 @@ Changed from earlier versions, beyond what the conversion drops:
   `ChordToggle`, `ChordCycleMode` and `ChordYawMode` switches are one key list
   per action: `ToggleKey`, `CycleTrackingModeKey` and `YawModeKey`. A chord you
   had switched off is left out of its list.
+- `[View] AdsMode` is no longer read. Head tracking carries on through the
+  sights whatever it held.
+- `[Hotkeys] AdsMode` and `ChordAdsMode` are no longer read, and neither
+  `Insert` nor `Ctrl+Shift+U` cycles an ADS mode any more.
 - A value the mod cannot use no longer stops it loading: the line is named in
   `HeadTracking.log` and the setting keeps its default. That covers a
   `FieldOfView` that is neither 0 nor 60 to 120, and `UdpPort` now takes 1 to
@@ -330,15 +334,16 @@ the `.prev` one.
 
 **Mod not loading**
 
-- Check that `winmm.dll`, `MetroExodusHeadTracking.asi` and
-  `MetroExodusHeadTracking.ini` are all in the folder holding `MetroExodus.exe`.
+- Check that `winmm.dll` and `MetroExodusHeadTracking.asi` are both in the
+  folder holding `MetroExodus.exe`.
 - If `HeadTracking.log` is absent, the loader never engaged. Re-run
   `install.cmd` and let it pick the folder.
-- If the log names a `Port` or `FieldOfView` out of range, that stops the whole
-  mod rather than just the key: nothing else in the file is applied and head
-  tracking does not start. `Port` takes 1024 to 65535 and `FieldOfView` takes 0
-  or 60 to 120. Fix the line, or delete the INI to get a clean default set
-  back.
+- If the log says the file could not be loaded because of its `Port` or
+  `FieldOfView`, it is a file from an earlier version that that version also
+  refused, and head tracking does not start until the line is fixed. `Port`
+  takes 1024 to 65535 and `FieldOfView` takes 0 or 60 to 120. Fix the line, or
+  delete the INI to get a clean default set back. In the new layout a value the
+  mod cannot use is named in the log and the setting keeps its default.
 - If the log says no build profile matched, the game has been patched since this
   release. The mod stays dormant and the game runs stock; check the Releases page
   for an update.
@@ -362,7 +367,7 @@ the `.prev` one.
 
 - Confirm the tracker is running and its output is UDP to `127.0.0.1`, port
   `4242`.
-- Check `Port` in the INI matches the port the tracker sends to.
+- Check `UdpPort` in the INI matches the port the tracker sends to.
 - Press `End` or `Ctrl+Shift+Y` in case tracking is toggled off, and check
   `EnableOnStartup` in the INI.
 - The log records whether packets are arriving, which separates a tracker
@@ -381,8 +386,7 @@ the `.prev` one.
   the CENTER button in a phone app, or SteamVR's reset.
 - If yaw feels wrong when you are looking a long way up or down, try the other
   yaw mode with `Page Down` or `Ctrl+Shift+H`.
-- If an axis moves the wrong way, invert it in the tracker, or set `InvertYaw`,
-  `InvertPitch` or `InvertRoll` in the INI.
+- If an axis moves the wrong way, invert it in the tracker.
 
 **The weapon is off to one side when I aim down sights**
 
@@ -402,14 +406,17 @@ Download the new release and run `install.cmd` again. Your config is preserved.
 
 ## Uninstalling
 
-Run `uninstall.cmd`. This removes the mod's `.asi`, its INI and its logs. The
-Ultimate ASI Loader is only removed if the installer put it there; use
+Run `uninstall.cmd`. This removes the mod's `.asi` and its logs, and leaves
+`MetroExodusHeadTracking.ini` (and any `.pre-canonical` copies of it) in place so
+a reinstall starts on your settings. Delete those by hand to remove the settings
+too. The Ultimate ASI Loader is only removed if the installer put it there; use
 `uninstall.cmd /force` to remove it anyway.
 
 ## Building from Source
 
-Visual Studio 2022 with the C++ desktop workload, CMake 3.20 or newer, and Git.
-The build needs no copy of the game.
+Visual Studio 2022 with the C++ desktop workload, CMake 3.20 or newer, Git, and
+Node.js on `PATH` (one of the tests runs the shared config lint with it). The
+build needs no copy of the game.
 
 ```powershell
 git clone --recurse-submodules https://github.com/itsloopyo/metro-exodus-enhanced-edition-headtracking
