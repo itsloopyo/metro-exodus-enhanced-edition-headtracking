@@ -270,20 +270,28 @@ std::vector<std::string> SharedFieldDifferences(const A& a, const B& b) {
 
 // What a player updating from the dev build sees change, and the commit that made each
 // change. The changelog carries the same list.
+//
+// An input counts towards a difference only when the dev build's reading of it shows that
+// difference, and is counted again under the variant it shows. A variant no input shows fails
+// the run, which is what catches a listed difference the dev build never had.
 struct ListedDifference {
     const char* id;
     const char* commit;
     const char* what;
+    std::vector<std::string> variants;
     int seen = 0;
+    std::map<std::string, int> seen_by_variant;
 };
 
 ListedDifference kComparisonOneDifferences[] = {
     {"ads-mode", "9554397",
      "[View] AdsMode is no longer read: whatever it held (paused unless changed), head tracking "
-     "carries on through the sights"},
+     "carries on through the sights",
+     {"paused", "marker", "tracked"}},
     {"ads-key", "9554397",
      "[Hotkeys] AdsMode and ChordAdsMode are no longer read, and neither the AdsMode key "
-     "(Insert unless changed) nor Ctrl+Shift+U cycles an ADS mode"},
+     "(Insert unless changed) nor Ctrl+Shift+U cycles an ADS mode",
+     {"AdsMode key", "Ctrl+Shift+U"}},
 };
 
 ListedDifference& Listed(const char* id) {
@@ -319,13 +327,30 @@ void CompareOracleWithImport(const std::string& name, const OracleRun& o, const 
         Fail(name, "comparison 1: " + field + " differs from the dev build with no listed reason");
     }
 
-    ++Listed("ads-mode").seen;
-    ++Listed("ads-key").seen;
+    // Every value the dev build can hold differs from tracking straight through the sights:
+    // paused stands tracking down while aiming, and marker and tracked replace the pose with
+    // one relative to where the head was when the sights came up (ads_gate.h and
+    // TrackingRuntime::SamplePerFrame at a71df8b). So every usable input shows this
+    // difference, counted under the value the dev build read; the variants are what make the
+    // inputs prove the dev build read the key at all.
+    ListedDifference& mode = Listed("ads-mode");
+    ++mode.seen;
+    ++mode.seen_by_variant[oracle::AdsModeValue(o.cfg.ads_mode)];
 
     // The dev build's registrations with the listed differences applied give the import's.
     std::vector<Registration> expected;
+    std::set<std::string> adsKeys;
     for (const Registration& r : OracleHotkeys(o.cfg)) {
-        if (r.action != Action::AdsMode) expected.push_back(r);
+        if (r.action != Action::AdsMode) {
+            expected.push_back(r);
+        } else {
+            adsKeys.insert(r.modifiers == kChord ? "Ctrl+Shift+U" : "AdsMode key");
+        }
+    }
+    if (!adsKeys.empty()) {
+        ListedDifference& key = Listed("ads-key");
+        ++key.seen;
+        for (const std::string& k : adsKeys) ++key.seen_by_variant[k];
     }
     const std::vector<Registration> actual = ImportHotkeys(i.cfg);
     if (expected != actual) {
@@ -687,6 +712,7 @@ int main() {
             {"no file", std::nullopt},
             {"empty file", std::string()},
             {"shipped by the dev build, and its seed", shipped},
+            {"AdsMode=marker", Replaced(shipped, "AdsMode=paused", "AdsMode=marker")},
             {"AdsMode=tracked", Replaced(shipped, "AdsMode=paused", "AdsMode=tracked")},
             {"YawMode on the AdsMode key", Replaced(shipped, "YawMode=0x22", "YawMode=0x2D")},
             {"ChordAdsMode=0", Replaced(shipped, "ChordAdsMode=1", "ChordAdsMode=0")},
@@ -715,8 +741,17 @@ int main() {
                     inputs.size() + corpus.size(), corpus.size(), firstRun == shipped ? "is" : "is not");
         std::printf("comparison 1, the dev build against the frozen reader:\n");
         for (const ListedDifference& d : kComparisonOneDifferences) {
-            std::printf("  %s (%s): %d inputs\n    %s\n", d.id, d.commit, d.seen, d.what);
-            if (d.seen == 0) Fail(d.id, "a listed difference no input shows");
+            std::printf("  %s (%s): shown by %d inputs (", d.id, d.commit, d.seen);
+            for (size_t k = 0; k < d.variants.size(); ++k) {
+                const auto count = d.seen_by_variant.find(d.variants[k]);
+                const int n = count == d.seen_by_variant.end() ? 0 : count->second;
+                std::printf("%s%s %d", k == 0 ? "" : ", ", d.variants[k].c_str(), n);
+                if (n == 0) Fail(d.id, d.variants[k] + ": a listed variant no input shows");
+            }
+            std::printf(")\n    %s\n", d.what);
+            if (d.seen_by_variant.size() != d.variants.size()) {
+                Fail(d.id, "an input shows a variant the list does not name");
+            }
         }
         std::printf("comparison 2, the frozen reader against the migration: %d created, %d converted "
                     "(%d with a changed sensitivity or inversion dropped), %d refused as the dev build refused "
