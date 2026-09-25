@@ -216,6 +216,8 @@ add_metroex_test(metroex_config_differential
     tests/config_differential/oracle/oracle_config.cpp
     src/legacy_config/legacy_config.cpp
     src/config.cpp
+    src/hotkeys.cpp
+    src/tracking_runtime.cpp
 )
 target_include_directories(metroex_config_differential PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential)

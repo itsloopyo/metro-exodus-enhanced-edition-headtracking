@@ -14,6 +14,8 @@
 
 namespace metroex {
 
+cameraunlock::TrackingMode StartupTrackingMode(const Config& cfg);
+
 class TrackingRuntime {
 public:
     TrackingRuntime() : m_session(m_receiver) {}

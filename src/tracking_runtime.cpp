@@ -40,6 +40,12 @@ const char* YawAxisName(bool worldSpaceYaw) {
 
 }  // namespace
 
+cameraunlock::TrackingMode StartupTrackingMode(const Config& cfg) {
+    // The config table reads a pair that names no mode as its defaults, so the
+    // pair always decodes.
+    return cameraunlock::DecodeTrackingMode(cfg.rotation_enabled, cfg.position_enabled).value();
+}
+
 void TrackingRuntime::Start(const Config& cfg) {
     m_cfg = cfg;
 
@@ -52,10 +58,7 @@ void TrackingRuntime::Start(const Config& cfg) {
     // owns the two smoothing values and recomposes them onto the struct.
     m_session.SetPositionSettings(m_cfg.position);
 
-    // The config table reads a pair that names no mode as its defaults, so the
-    // pair always decodes.
-    const cameraunlock::TrackingMode mode =
-        cameraunlock::DecodeTrackingMode(m_cfg.rotation_enabled, m_cfg.position_enabled).value();
+    const cameraunlock::TrackingMode mode = StartupTrackingMode(m_cfg);
     m_session.SetMode(mode);
     m_desiredMode.store(static_cast<int>(mode), std::memory_order_relaxed);
     m_appliedMode.store(static_cast<int>(mode), std::memory_order_release);

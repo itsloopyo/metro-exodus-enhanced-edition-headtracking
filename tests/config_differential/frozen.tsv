@@ -24,10 +24,11 @@ cameraunlock-core/cpp/include/cameraunlock/effects/head_follow_light.h	975470cfa
 a71df8b:src/config.h	f3649c366a57eb39b5219893c687d4ab765ccb64787219ccec6d0434b53e4c64	oracle source
 a71df8b:src/config.cpp	fd97b0f2ab0e4a09f03eb06d67f97732ba6909e672b39f66f4a4fd709f698bf2	oracle source
 a71df8b:src/ads.h	86a9e75654009e177c7d9f493ba22221e8570805ecc9fd11f76b8150a8daf0c0	oracle source
-a71df8b:src/hotkeys.cpp	716b416202417d4410e71e13562f415a416d9a8492e802094aa67d80af55cd78	oracle source
-a71df8b:src/tracking_runtime.cpp	5d2ff3a6ce020ae7876159e52e4194788b5ec3039fa2ea20d8c1a62f2c63509f	oracle source
+a71df8b:src/hotkeys.cpp	716b416202417d4410e71e13562f415a416d9a8492e802094aa67d80af55cd78	copied by hand into differential_tests.cpp as OracleHotkeys
+a71df8b:src/tracking_runtime.cpp	5d2ff3a6ce020ae7876159e52e4194788b5ec3039fa2ea20d8c1a62f2c63509f	not compiled; its startup mode rule is 7cca164's, which FromImport copies by hand, so comparison 1's equal Config fields are equal startup state
 a71df8b:MetroExodusHeadTracking.ini	f0a6244aa6c78e404be0ffa1f982b3d251665450cdb18f8e945de926d75cfa30	the shipped file as git stores it (LF); checked out under *.ini eol=crlf it is the input below
 26b4f17:cpp/include/cameraunlock/ads/ads_mode.h	94cd36b585e878e673566f602e9496417cb797970162fcc9c2af1e50e24358de	oracle source (oracle/oracle_ads.h)
 7cca164:src/config.h	6ec0ffa1b2704a039760aee6a1ccbd0dbb4e921139acd45ffe68753cff0549e1	the reader and startup code the import was frozen from
 7cca164:src/config.cpp	5d1c76d217d3bb7281cb513c3462b1623cdefe32ef18bf06b203e70e4667ecb1	the reader and startup code the import was frozen from
-7cca164:src/hotkeys.cpp	321131558c1a1eb56176d2490f7660a296ca8e9ca9a4f55071284ba99eb4e676	the reader and startup code the import was frozen from
+7cca164:src/hotkeys.cpp	321131558c1a1eb56176d2490f7660a296ca8e9ca9a4f55071284ba99eb4e676	the import's startup code, copied by hand into differential_tests.cpp as ImportHotkeys
+7cca164:src/tracking_runtime.cpp	6ca17048c03a0a0f3ec8d4a9c7da45db82cff9c167249d2f1a72f982b186e5e1	the import's startup mode rule, copied by hand into differential_tests.cpp as FromImport

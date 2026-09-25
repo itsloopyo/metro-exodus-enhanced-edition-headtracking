@@ -21,10 +21,19 @@
 // same bytes in its installer ZIP, its Nexus ZIP and its launcher-manifest seed, extracted once
 // into inputs/), the oracle's own first-run output, a few hand-written files for the listed
 // differences, and core's corpus over the shipped file.
+//
+// The migration's startup state comes from this build's own code: ParseHotkeys is what
+// Hotkeys::Start registers and StartupTrackingMode is what TrackingRuntime::Start sets. The
+// oracle's and the import's startup code (OracleHotkeys, ImportHotkeys, FromImport) is copied
+// by hand from src/hotkeys.cpp and src/tracking_runtime.cpp at a71df8b and 7cca164. Those
+// commits cannot change, so the copies cannot drift from them; they were checked line by line
+// against them and have to be read against them again if they are ever edited.
 
 #include "config.h"
+#include "hotkeys.h"
 #include "legacy_config/legacy_config.h"
 #include "oracle/oracle_config.h"
+#include "tracking_runtime.h"
 
 #include "cameraunlock/config/config_owner.h"
 #include "cameraunlock/config/legacy_import.h"
@@ -422,20 +431,21 @@ Startup FromImport(const legacy::Config& c) {
     return s;
 }
 
-void AddKeyList(std::vector<Registration>& regs, Action action, const std::string& list) {
-    const cameraunlock::input::KeyBindingsParseResult parsed = cameraunlock::input::ParseKeyBindings(list);
-    if (!parsed.ok()) throw std::logic_error("'" + list + "' is not a key list: " + parsed.error);
-    for (const cameraunlock::input::KeyBinding& b : parsed.bindings) {
+void AddBindings(std::vector<Registration>& regs, Action action,
+                 const std::vector<cameraunlock::input::KeyBinding>& bindings) {
+    for (const cameraunlock::input::KeyBinding& b : bindings) {
         regs.push_back({action, b.vk, static_cast<unsigned>(b.modifiers)});
     }
 }
 
-// This build: TrackingRuntime::Start, Hotkeys::Start and CameraHook::Initialise.
+// This build: StartupTrackingMode and ParseHotkeys are the code TrackingRuntime::Start and
+// Hotkeys::Start run; the other fields reach TrackingRuntime::Start and CameraHook::Initialise
+// as read.
 Startup FromMigration(const Config& c) {
     Startup s;
     s.port = c.udp_port;
     s.enabled = c.enable_on_startup;
-    s.mode = cameraunlock::DecodeTrackingMode(c.rotation_enabled, c.position_enabled).value();
+    s.mode = metroex::StartupTrackingMode(c);
     s.world_yaw = c.world_space_yaw;
     s.local_smoothing = Bits(c.position.local_smoothing);
     s.remote_smoothing = Bits(c.position.remote_smoothing);
@@ -451,9 +461,10 @@ Startup FromMigration(const Config& c) {
     s.discovery = c.discovery;
     s.light_follows_head = c.light.follows_head;
     s.light_multiplier = Bits(c.light.multiplier);
-    AddKeyList(s.hotkeys, Action::Toggle, c.toggle_key_name);
-    AddKeyList(s.hotkeys, Action::CycleMode, c.cycle_tracking_mode_key_name);
-    AddKeyList(s.hotkeys, Action::YawMode, c.yaw_mode_key_name);
+    const metroex::HotkeyBindings bindings = metroex::ParseHotkeys(c);
+    AddBindings(s.hotkeys, Action::Toggle, bindings.toggle);
+    AddBindings(s.hotkeys, Action::CycleMode, bindings.cycleMode);
+    AddBindings(s.hotkeys, Action::YawMode, bindings.yawMode);
     std::sort(s.hotkeys.begin(), s.hotkeys.end());
     return s;
 }
