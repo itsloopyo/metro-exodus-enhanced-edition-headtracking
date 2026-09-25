@@ -271,7 +271,7 @@ Discovery=false
 The mod reads the file when the game starts, so an edit takes effect at the next
 launch.
 
-Changed from earlier versions, beyond what the conversion drops:
+Changed from earlier versions:
 
 - `[Sensitivity]` (`Yaw`, `Pitch`, `Roll`, `InvertYaw`, `InvertPitch`,
   `InvertRoll`) and `[Position] SensitivityX`, `SensitivityY` and `SensitivityZ`
