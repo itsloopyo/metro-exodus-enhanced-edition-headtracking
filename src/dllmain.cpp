@@ -7,25 +7,21 @@
 #include "tracking_runtime.h"
 #include "window_centering.h"
 
+#include "cameraunlock/config/config_owner.h"
 #include "cameraunlock/diagnostics/crash_handler.h"
+#include "cameraunlock/tracking/tracking_mode.h"
 
+#include <functional>
+#include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <windows.h>
 
 namespace metroex {
 
 namespace {
-
-// Beside the exe, like the log, and NOT beside the .asi.
-//
-// Ultimate ASI Loader scans `scripts\` and `plugins\` as well as the exe
-// directory, so the two can be different folders. When they are, an .asi-relative
-// config lands somewhere the player was never told about, the mod writes a fresh
-// default file there, and the one at the game root that the README, the Nexus
-// page and the launcher manifest all name is read by nobody. Resolving beside the
-// exe makes the config, the log and every document agree on one directory.
-constexpr char kIniFilename[] = "MetroExodusHeadTracking.ini";
 
 // Nothing unloads this module.
 //
@@ -59,6 +55,10 @@ bool PinThisModule() {
 Config g_config;
 CameraHook g_camera;
 
+// The one reader and writer of the config file. InitThread loads it; the hotkey
+// thread saves through it after that.
+std::optional<cameraunlock::config::ConfigOwner<Config>> g_configOwner;
+
 // The two that own background threads are LEAKED ON PURPOSE.
 //
 // The module is pinned, so the only teardown that ever happens is process exit,
@@ -87,6 +87,32 @@ void LogRunningBuild() {
               build.fingerprint.SizeOfImage, build.fingerprint.CheckSum);
 }
 
+void LogLines(const std::vector<std::string>& lines) {
+    for (const std::string& line : lines) Log::Line("%s", line.c_str());
+}
+
+// The new state is already applied when this runs; a save that fails leaves the
+// session on it and says so in the log.
+void Save(const std::function<void(Config&)>& change) {
+    const cameraunlock::config::ConfigSaveResult saved = g_configOwner->Save(change);
+    LogLines(saved.log);
+    if (!saved.reason.empty()) Log::Line("WARN: %s", saved.reason.c_str());
+}
+
+void CycleModeAndSave() {
+    const cameraunlock::TrackingModeChannels channels =
+        cameraunlock::EncodeTrackingMode(g_tracking.CycleMode());
+    Save([channels](Config& c) {
+        c.rotation_enabled = channels.rotation_enabled;
+        c.position_enabled = channels.position_enabled;
+    });
+}
+
+void ToggleYawModeAndSave() {
+    const bool worldSpaceYaw = g_tracking.ToggleYawMode();
+    Save([worldSpaceYaw](Config& c) { c.world_space_yaw = worldSpaceYaw; });
+}
+
 DWORD WINAPI InitThread(LPVOID) {
     OpenLog();
 
@@ -100,26 +126,35 @@ DWORD WINAPI InitThread(LPVOID) {
 
     LogRunningBuild();
 
-    const std::string iniPath = GetExePath(kIniFilename);
+    const std::wstring iniPath = GetExePathW(kConfigFileName);
     if (iniPath.empty()) {
-        Log::Line("ERROR: could not resolve the directory MetroExodus.exe is in, so %s cannot be "
+        Log::Line("ERROR: could not resolve the directory MetroExodus.exe is in, so %ls cannot be "
                   "read or written; head tracking is not starting",
-                  kIniFilename);
+                  kConfigFileName);
         return 0;
     }
-    if (!g_config.LoadOrCreate(iniPath.c_str())) {
-        Log::Line("ERROR: %s could not be loaded; head tracking is not starting",
-                  iniPath.c_str());
+    g_configOwner.emplace(ConfigOwnerOptionsFor(iniPath));
+    cameraunlock::config::ConfigLoadResult<Config> loaded = g_configOwner->Load();
+    LogLines(loaded.log);
+    Log::Line("Config: %ls (%s)", iniPath.c_str(),
+              cameraunlock::config::ConfigLoadStatusName(loaded.status));
+    if (!loaded.reason.empty()) Log::Line("WARN: %s", loaded.reason.c_str());
+    // The build before the canonical format did not start on a file it refused (a
+    // port outside 1024-65535, a field of view that is neither 0 nor 60 to 120),
+    // so this one does not either until the player fixes it.
+    if (loaded.status == cameraunlock::config::ConfigLoadStatus::LegacyRefused) {
+        Log::Line("ERROR: %ls could not be loaded; head tracking is not starting", iniPath.c_str());
         return 0;
     }
-    Log::Line("Config: %s", iniPath.c_str());
+    g_config = std::move(loaded.config);
 
     g_tracking.Start(g_config);
 
+    // End changes the session only. The mode and yaw keys save what they switch to.
     Hotkeys::Actions actions;
     actions.toggle = [] { g_tracking.ToggleEnabled(); };
-    actions.cycleMode = [] { g_tracking.CycleMode(); };
-    actions.yawMode = [] { g_tracking.ToggleYawMode(); };
+    actions.cycleMode = [] { CycleModeAndSave(); };
+    actions.yawMode = [] { ToggleYawModeAndSave(); };
     g_hotkeys.Start(g_config, std::move(actions));
 
     // Last, because it is the one that can fail on a build the rest of the mod

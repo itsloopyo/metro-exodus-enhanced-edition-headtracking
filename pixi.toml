@@ -33,6 +33,11 @@ test = { cmd = "ctest --test-dir build -C Debug --output-on-failure", depends-on
 # difference would otherwise reach a player with nothing having run against it.
 test-release = { cmd = "ctest --test-dir build -C Release --output-on-failure", depends-on = ["build"] }
 
+# Rewrites MetroExodusHeadTracking.ini from the config table after a change to a row, a
+# comment or a default, then re-encodes the launcher-manifest.json seed from it. The config
+# tests fail until it has run.
+render-config = { cmd = "build/Debug/metroex_config_tests.exe --render-config MetroExodusHeadTracking.ini && node cameraunlock-core/scripts/encode-seed.mjs", depends-on = ["build-debug"] }
+
 # The fleet-wide linter over the wrapper scripts, the README and this file. Lives
 # in the submodule because every mod is checked against the same templates.
 #

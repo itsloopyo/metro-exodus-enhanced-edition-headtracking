@@ -166,7 +166,7 @@ void TestBindFailureNamesTheOsReason(uint16_t port, const std::filesystem::path&
 
     metroex::Config cfg;
     cfg.udp_port = port;
-    cfg.enabled_on_startup = true;
+    cfg.enable_on_startup = true;
 
     metroex::TrackingRuntime rt;
     rt.Start(cfg);
@@ -197,7 +197,7 @@ void TestPortFreeToFirstPose(uint16_t port) {
 
     metroex::Config cfg;
     cfg.udp_port = port;
-    cfg.enabled_on_startup = true;
+    cfg.enable_on_startup = true;
 
     metroex::TrackingRuntime rt;
     rt.Start(cfg);

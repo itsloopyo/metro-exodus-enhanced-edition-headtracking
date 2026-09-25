@@ -1,305 +1,252 @@
-// The INI contract for the vertical position limits.
+// The committed config, the launcher seed, the owner's saves and the one codec of the mod's own.
 //
-// The processor clamps y as [-limit_y_down, +limit_y], and limit_y_down carries
-// its own default. An INI written before the LimitYDown key existed carries only
-// LimitY, so LimitY has to reach both bounds or the player gets asymmetric travel
-// with nothing saying why.
-
-#include <cstdio>
-#include <string>
-
-#include <windows.h>
+// `--render-config <path>` writes the table's defaults, rendered, to <path> and exits without
+// running the tests; `pixi run render-config` uses it to rewrite the committed file after a
+// change to a row, a comment or a default.
 
 #include "config.h"
 #include "test_harness.h"
 
-namespace {
+#include "cameraunlock/config/canonical_ini.h"
+#include "cameraunlock/config/config_owner.h"
 
+#include <windows.h>
+
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace fs = std::filesystem;
+namespace cfg = cameraunlock::config;
+using metroex::Config;
 using metroex_test::Check;
 
-// These are INI values read back through a float parse, so they either
-// round-trip exactly or the parse is wrong; the tolerance only keeps the
-// comparison off exact float equality.
-constexpr float kTolerance = 1e-6f;
+namespace {
 
-void CheckNear(float actual, float expected, const char* what) {
-    metroex_test::CheckNear(actual, expected, kTolerance, what);
+std::string ReadBytes(const fs::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error("could not read " + path.string());
+    return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 }
 
-// IniReader reads through GetPrivateProfileString, which resolves a relative path
-// against the Windows directory and caches the file it last read, so every case
-// gets an absolute path of its own under TEMP.
-std::string WriteIni(const char* tag, const char* body) {
-    char temp[MAX_PATH] = {};
-    GetTempPathA(MAX_PATH, temp);
-    const std::string path = std::string(temp) + "metroexodus_ht_config_" + tag + ".ini";
+void WriteBytes(const fs::path& path, const std::string& bytes) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    if (!out) throw std::runtime_error("could not write " + path.string());
+}
 
-    FILE* f = nullptr;
-    fopen_s(&f, path.c_str(), "w");
-    if (f == nullptr) {
-        Check(false, "the case's INI could not be written");
-        std::printf("       path was %s\n", path.c_str());
-        return path;
+std::string Rendered() {
+    const cfg::ConfigTable<Config> table = metroex::ConfigTable();
+    return cfg::RenderCanonical(table, table.defaults(), cfg::RenderHeader{metroex::kGameDisplayName});
+}
+
+std::vector<std::string> Lines(const std::string& bytes) {
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    for (std::size_t i = 0; i + 1 < bytes.size(); ++i) {
+        if (bytes[i] == '\r' && bytes[i + 1] == '\n') {
+            lines.push_back(bytes.substr(start, i - start));
+            start = i + 2;
+        }
     }
-    std::fputs(body, f);
-    std::fclose(f);
-    return path;
+    lines.push_back(bytes.substr(start));
+    return lines;
 }
 
-void LimitYReachesBothBoundsWhenLimitYDownIsAbsent() {
-    metroex::Config raised;
-    raised.LoadOrCreate(WriteIni("wide", "[Position]\nLimitY=0.40\n").c_str());
-    CheckNear(raised.pos_limit_y, 0.40f, "LimitY=0.40 raises the upward bound");
-    CheckNear(raised.pos_limit_y_down, 0.40f,
-              "LimitY=0.40 raises the downward bound too, rather than leaving 0.20");
-
-    metroex::Config tightened;
-    tightened.LoadOrCreate(WriteIni("tight", "[Position]\nLimitY=0.05\n").c_str());
-    CheckNear(tightened.pos_limit_y, 0.05f, "LimitY=0.05 lowers the upward bound");
-    CheckNear(tightened.pos_limit_y_down, 0.05f, "LimitY=0.05 lowers the downward bound too");
+// Every line that differs, as "before -> after". The two files must have the same number of
+// lines.
+std::vector<std::string> ChangedLines(const std::string& before, const std::string& after) {
+    const std::vector<std::string> a = Lines(before), b = Lines(after);
+    if (a.size() != b.size()) return {"line count changed"};
+    std::vector<std::string> changed;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (a[i] != b[i]) changed.push_back(a[i] + " -> " + b[i]);
+    }
+    return changed;
 }
 
-// An INI written by an older release still carries the retired ADS cycle: its
-// key and chord under [Hotkeys] and the mode under [View]. It has to load
-// exactly as a file without them does, with nothing refused.
-void AConfigCarryingTheRetiredAdsCycleLoadsCleanly() {
-    metroex::Config old;
-    Check(old.LoadOrCreate(WriteIni("ads_retired", "[Hotkeys]\nAdsMode=0x2D\nChordAdsMode=1\n"
-                                                   "[View]\nAdsMode=marker\n"
-                                                   "[Position]\nLimitY=0.35\n")
-                               .c_str()),
-          "a config still carrying the ADS keys loads");
-    CheckNear(old.pos_limit_y, 0.35f, "and the rest of it is read as written");
+class Scratch {
+public:
+    Scratch() {
+        root_ = fs::temp_directory_path() / ("metroex-config-tests-" + std::to_string(GetCurrentProcessId()));
+        fs::remove_all(root_);
+        fs::create_directories(root_);
+    }
+    ~Scratch() {
+        std::error_code ec;
+        fs::remove_all(root_, ec);
+    }
+    fs::path Fresh(const std::string& leaf) {
+        const fs::path dir = root_ / leaf;
+        fs::create_directories(dir);
+        return dir / metroex::kConfigFileName;
+    }
+
+private:
+    fs::path root_;
+};
+
+// Enough base64 to read one JSON string value back. It refuses anything outside the alphabet
+// rather than skipping it, so a blob the launcher would choke on fails here.
+bool DecodeBase64(const std::string& encoded, std::string& out) {
+    static const char kAlphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    out.clear();
+    uint32_t accumulator = 0;
+    int bits = 0;
+    size_t padding = 0;
+    for (const char c : encoded) {
+        if (c == '=') {
+            ++padding;
+            continue;
+        }
+        if (padding != 0 || c == '\0') return false;
+        const char* found = std::strchr(kAlphabet, c);
+        if (found == nullptr) return false;
+        accumulator = (accumulator << 6) | static_cast<uint32_t>(found - kAlphabet);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<char>((accumulator >> bits) & 0xFF));
+        }
+    }
+    return padding <= 2;
 }
 
-void TheNavBindingsAreUnchanged() {
-    metroex::Config cfg;
-    cfg.LoadOrCreate(WriteIni("nav_keys", "[Position]\nLimitY=0.20\n").c_str());
-    Check(cfg.vk_toggle == 0x23, "the toggle stays on End");
-    Check(cfg.vk_cycle_mode == 0x21, "and the tracking-mode cycle stays on Page Up");
+void RenderTest(const std::string& committed) {
+    Check(Rendered() == committed,
+          "MetroExodusHeadTracking.ini differs from the table's defaults; run pixi run render-config");
+    const cfg::CanonicalIni doc = cfg::ParseCanonicalIni(committed);
+    Check(doc.IsReadable() && doc.diagnostics.empty(), "the committed file draws no reader diagnostics");
+    Config read;
+    Check(cfg::ApplyCanonical(doc, metroex::ConfigTable(), read).diagnostics.empty(),
+          "the committed file draws no table diagnostics");
 }
 
-// The yaw mode is the one view setting with both a key and a config entry, and
-// the entry is newer than the first shipped INI. A file written before the key
-// existed has to come up horizon-locked rather than on whatever a missing key
-// happens to parse as.
-void YawModeDefaultsToWorldSpaceAndSitsOnPageDown() {
-    metroex::Config absent;
-    absent.LoadOrCreate(WriteIni("yaw_absent", "[Position]\nLimitY=0.20\n").c_str());
-    Check(absent.world_space_yaw, "an absent WorldSpaceYaw is horizon-locked yaw");
-    Check(absent.vk_yaw_mode == 0x22, "the yaw-mode toggle is on Page Down");
-    Check(absent.chord_yaw_mode, "and its Ctrl+Shift+H chord is on");
-
-    metroex::Config local;
-    local.LoadOrCreate(WriteIni("yaw_local", "[General]\nWorldSpaceYaw=false\n").c_str());
-    Check(!local.world_space_yaw, "WorldSpaceYaw=false starts the mod on camera-local yaw");
+// The launcher writes the config from the manifest's own base64, so it has to be the committed
+// file byte for byte. encode-seed.mjs rewrites it; this is what fails when nobody ran it.
+void SeedTest(const std::string& committed) {
+    const std::string manifest = ReadBytes(METROEX_LAUNCHER_MANIFEST);
+    const std::string field = "\"content_b64\"";
+    const size_t at = manifest.find(field);
+    Check(at != std::string::npos, "launcher-manifest.json carries a seed");
+    if (at == std::string::npos) return;
+    const size_t open = manifest.find('"', manifest.find(':', at + field.size()) + 1);
+    const size_t close = manifest.find('"', open + 1);
+    std::string seed;
+    Check(DecodeBase64(manifest.substr(open + 1, close - open - 1), seed), "the seed is base64");
+    Check(seed == committed, "the launcher seed is the committed file; run pixi run render-config");
+    Check(manifest.find(field, close) == std::string::npos, "launcher-manifest.json carries one seed");
 }
 
-void AnExplicitLimitYDownStillWins() {
-    metroex::Config cfg;
-    cfg.LoadOrCreate(WriteIni("both", "[Position]\nLimitY=0.40\nLimitYDown=0.05\n").c_str());
-    CheckNear(cfg.pos_limit_y, 0.40f, "LimitY is read");
-    CheckNear(cfg.pos_limit_y_down, 0.05f, "an explicit LimitYDown overrides the mirrored value");
+void CreatedIsTheCommittedFile(Scratch& scratch, const std::string& committed) {
+    const fs::path created = scratch.Fresh("created");
+    cfg::ConfigOwner<Config> fresh(metroex::ConfigOwnerOptionsFor(created.wstring()));
+    Check(fresh.Load().status == cfg::ConfigLoadStatus::Created, "no file loads as Created");
+    Check(ReadBytes(created) == committed, "the created file is the committed file");
 }
 
-// The field of view is the one key that reaches into the game's own settings,
-// so 0 has to mean "leave it alone" and a value the engine would refuse has to
-// stop the load rather than be quietly moved to the nearest one the game likes.
-void FieldOfViewIsOffByDefaultAndRefusesValuesOutsideItsRange() {
-    metroex::Config absent;
-    Check(absent.LoadOrCreate(WriteIni("fov_absent", "[Position]\nLimitY=0.20\n").c_str()),
-          "a file with no FieldOfView key loads");
-    CheckNear(absent.fov_override, 0.0f, "and leaves the game's own field of view alone");
+void SaveTests(Scratch& scratch, const std::string& committed) {
+    const fs::path file = scratch.Fresh("saves");
+    WriteBytes(file, committed);
+    cfg::ConfigOwner<Config> owner(metroex::ConfigOwnerOptionsFor(file.wstring()));
+    Check(owner.Load().status == cfg::ConfigLoadStatus::Canonical, "the committed file loads as Canonical");
 
-    metroex::Config off;
-    Check(off.LoadOrCreate(WriteIni("fov_zero", "[Camera]\nFieldOfView=0\n").c_str()),
-          "an explicit 0 loads");
-    CheckNear(off.fov_override, 0.0f, "and is still the off switch, not a field of view");
+    std::string before = ReadBytes(file);
+    Check(owner.Save([](Config& c) { c.world_space_yaw = false; }).status == cfg::ConfigSaveStatus::Saved,
+          "the yaw mode saves");
+    std::vector<std::string> changed = ChangedLines(before, ReadBytes(file));
+    Check(changed.size() == 1 && changed[0] == "WorldSpaceYaw=true -> WorldSpaceYaw=false",
+          "the yaw mode save changes its own line and no other");
 
-    metroex::Config past;
-    Check(past.LoadOrCreate(WriteIni("fov_past", "[Camera]\nFieldOfView=90\n").c_str()),
-          "a value past the game's own 75-degree limit loads");
-    CheckNear(past.fov_override, 90.0f, "and is kept, because widening that limit is the point");
+    before = ReadBytes(file);
+    Check(owner.Save([](Config& c) {
+              c.rotation_enabled = true;
+              c.position_enabled = false;
+          }).status == cfg::ConfigSaveStatus::Saved,
+          "rotation only saves");
+    changed = ChangedLines(before, ReadBytes(file));
+    Check(changed.size() == 1 && changed[0] == "PositionEnabled=true -> PositionEnabled=false",
+          "the rotation-only save changes its own line and no other");
 
-    metroex::Config high;
-    Check(!high.LoadOrCreate(WriteIni("fov_high", "[Camera]\nFieldOfView=200\n").c_str()),
-          "a field of view past the engine's own clamp fails the load");
+    before = ReadBytes(file);
+    Check(owner.Save([](Config& c) {
+              c.rotation_enabled = false;
+              c.position_enabled = true;
+          }).status == cfg::ConfigSaveStatus::Saved,
+          "position only saves");
+    changed = ChangedLines(before, ReadBytes(file));
+    Check(changed.size() == 2 && changed[0] == "RotationEnabled=true -> RotationEnabled=false" &&
+              changed[1] == "PositionEnabled=false -> PositionEnabled=true",
+          "the position-only save changes exactly the pair");
 
-    metroex::Config low;
-    Check(!low.LoadOrCreate(WriteIni("fov_low", "[Camera]\nFieldOfView=30\n").c_str()),
-          "and so does one below the floor the game's own slider has");
+    before = ReadBytes(file);
+    bool threw = false;
+    try {
+        owner.Save([](Config& c) { c.enable_on_startup = false; });
+    } catch (const std::logic_error&) {
+        threw = true;
+    }
+    Check(threw, "EnableOnStartup is not Writable: End never persists");
+    Check(ReadBytes(file) == before, "a refused save writes nothing");
+
+    cfg::ConfigOwner<Config> restarted(metroex::ConfigOwnerOptionsFor(file.wstring()));
+    const cfg::ConfigLoadResult<Config> loaded = restarted.Load();
+    Check(!loaded.config.world_space_yaw && !loaded.config.rotation_enabled && loaded.config.position_enabled,
+          "the saved toggles come back at the next load");
 }
 
-// The numbers a player types are the one place raw text becomes a float that
-// reaches the camera transform, so each is read through the shared guards rather
-// than IniReader's parse-a-prefix readers. All five of these loaded silently
-// before: "nan" and an overflowing literal became a NaN view matrix written
-// every frame, a decimal comma parsed as 0 and passed every range check, a
-// negative travel limit inverted the clamp in PositionProcessor and pinned the
-// lean at a fixed offset, and an unpollable key code registered a hotkey that
-// could never fire.
-// A bool with a trailing comment is the player writing a note to themselves,
-// not a malformed value. IniReader::ReadBool compares the WHOLE string and
-// GetPrivateProfileString does not strip the comment, so reading through it
-// silently returned the default: `Enabled=0 ; no 6dof` left positional tracking
-// ON with nothing in the log about the line the player had just edited.
-void ABoolWithATrailingCommentIsHonouredRatherThanDropped() {
-    metroex::Config commented;
-    commented.LoadOrCreate(
-        WriteIni("bool_comment", "[Position]\nEnabled=0 ; no 6dof for me\n").c_str());
-    Check(!commented.position_enabled,
-          "a bool followed by an inline comment reads as the value the player wrote");
+// FieldOfView is 0 or 60 to 120. Anything else keeps the default, 0, which leaves the game's own
+// field of view alone.
+void FieldOfViewReadsZeroOrSixtyToOneTwenty() {
+    const metroex::FovCodec codec;
+    Check(codec.Parse("0").ok() && codec.Parse("0").value == 0.0f, "FieldOfView=0 reads");
+    Check(codec.Parse("60").ok() && codec.Parse("60").value == 60.0f, "FieldOfView=60 reads");
+    Check(codec.Parse("120.0").ok() && codec.Parse("120.0").value == 120.0f, "FieldOfView=120.0 reads");
+    Check(!codec.Parse("59.9").ok(), "FieldOfView=59.9 does not read");
+    Check(!codec.Parse("30").ok(), "FieldOfView=30 does not read");
+    Check(!codec.Parse("120.5").ok(), "FieldOfView=120.5 does not read");
+    Check(!codec.Parse("-60").ok(), "FieldOfView=-60 does not read");
+    Check(!codec.Parse("nan").ok(), "FieldOfView=nan does not read");
+    Check(codec.Render(90.0f) == "90.0" && codec.Render(0.0f) == "0.0", "FieldOfView writes as a float");
 
-    metroex::Config hashed;
-    hashed.LoadOrCreate(WriteIni("bool_hash", "[Camera]\nDiscovery=1 # for the bug report\n")
-                            .c_str());
-    Check(hashed.discovery, "and a hash comment is stripped the same way");
-
-    // Case is not the player's problem either.
-    metroex::Config shouty;
-    shouty.LoadOrCreate(WriteIni("bool_case", "[General]\nWorldSpaceYaw=FALSE\n").c_str());
-    Check(!shouty.world_space_yaw, "and the accepted words are matched case-insensitively");
-
-    // Only a value that is genuinely not one of the words falls back, and the
-    // fallback is the default rather than whichever way the parse happened to
-    // land.
-    metroex::Config nonsense;
-    nonsense.LoadOrCreate(WriteIni("bool_junk", "[Position]\nEnabled=maybe\n").c_str());
-    Check(nonsense.position_enabled, "a word this reader has no meaning for falls back");
-}
-
-void MalformedNumbersFallBackInsteadOfReachingTheCamera() {
-    metroex::Config notFinite;
-    notFinite.LoadOrCreate(WriteIni("guard_nan", "[Sensitivity]\nYaw=nan\n").c_str());
-    CheckNear(notFinite.sens_yaw, 1.0f, "a non-finite sensitivity falls back to the default");
-
-    metroex::Config comma;
-    comma.LoadOrCreate(WriteIni("guard_comma", "[Smoothing]\nRemoteSmoothing=0,15\n").c_str());
-    CheckNear(comma.remote_smoothing, 0.15f,
-              "a decimal comma falls back to the key's own default rather than parsing as 0");
-
-    metroex::Config negative;
-    negative.LoadOrCreate(WriteIni("guard_limit", "[Position]\nLimitZ=-0.40\n").c_str());
-    CheckNear(negative.pos_limit_z, 0.0f,
-              "a negative travel limit is clamped rather than inverting the lean clamp");
-
-    metroex::Config unbindable;
-    unbindable.LoadOrCreate(WriteIni("guard_vk", "[Hotkeys]\nToggle=0x230\n").c_str());
-    Check(unbindable.vk_toggle == 0x23,
-          "a key code the OS cannot poll falls back to End rather than binding nothing");
-
-    metroex::Config fov;
-    Check(!fov.LoadOrCreate(WriteIni("guard_fov", "[Camera]\nFieldOfView=nan\n").c_str()),
-          "and a non-finite field of view fails the load rather than reaching the engine");
-}
-
-// The default file the mod writes when there is none, read back through the
-// same reader the player's own file goes through. Every default lives in three
-// places - the member initialiser, the key this file is written with, and the
-// fallback the reader uses when a key is absent - and a value that disagrees
-// between them is silent: the file on disk says one thing and a config missing
-// the key does another.
-void TheGeneratedDefaultFileParsesBackAsTheStructDefaults() {
-    char temp[MAX_PATH] = {};
-    GetTempPathA(MAX_PATH, temp);
-    const std::string path = std::string(temp) + "metroexodus_ht_config_generated.ini";
-    DeleteFileA(path.c_str());
-
-    metroex::Config written;
-    Check(written.LoadOrCreate(path.c_str()), "a missing file is written and then read back");
-
-    const metroex::Config expected;
-    Check(written.enabled_on_startup == expected.enabled_on_startup, "EnableOnStartup round-trips");
-    Check(written.udp_port == expected.udp_port, "Port round-trips");
-    Check(written.world_space_yaw == expected.world_space_yaw, "WorldSpaceYaw round-trips");
-    CheckNear(written.sens_yaw, expected.sens_yaw, "Yaw sensitivity round-trips");
-    CheckNear(written.sens_pitch, expected.sens_pitch, "Pitch sensitivity round-trips");
-    CheckNear(written.sens_roll, expected.sens_roll, "Roll sensitivity round-trips");
-    Check(written.invert_yaw == expected.invert_yaw, "InvertYaw round-trips");
-    Check(written.invert_pitch == expected.invert_pitch, "InvertPitch round-trips");
-    Check(written.invert_roll == expected.invert_roll, "InvertRoll round-trips");
-    CheckNear(written.local_smoothing, expected.local_smoothing, "LocalSmoothing round-trips");
-    CheckNear(written.remote_smoothing, expected.remote_smoothing, "RemoteSmoothing round-trips");
-    Check(written.position_enabled == expected.position_enabled, "Position Enabled round-trips");
-    CheckNear(written.pos_sens_x, expected.pos_sens_x, "SensitivityX round-trips");
-    CheckNear(written.pos_sens_y, expected.pos_sens_y, "SensitivityY round-trips");
-    CheckNear(written.pos_sens_z, expected.pos_sens_z, "SensitivityZ round-trips");
-    CheckNear(written.pos_limit_x, expected.pos_limit_x, "LimitX round-trips");
-    CheckNear(written.pos_limit_y, expected.pos_limit_y, "LimitY round-trips");
-    CheckNear(written.pos_limit_y_down, expected.pos_limit_y_down, "LimitYDown round-trips");
-    CheckNear(written.pos_limit_z, expected.pos_limit_z, "LimitZ round-trips");
-    CheckNear(written.pos_limit_z_back, expected.pos_limit_z_back, "LimitZBack round-trips");
-    Check(written.vk_toggle == expected.vk_toggle, "the toggle key round-trips");
-    Check(written.vk_cycle_mode == expected.vk_cycle_mode, "the mode cycle key round-trips");
-    Check(written.vk_yaw_mode == expected.vk_yaw_mode, "the yaw mode key round-trips");
-    Check(written.chord_toggle == expected.chord_toggle, "ChordToggle round-trips");
-    Check(written.chord_cycle_mode == expected.chord_cycle_mode, "ChordCycleMode round-trips");
-    Check(written.chord_yaw_mode == expected.chord_yaw_mode, "ChordYawMode round-trips");
-    CheckNear(written.fov_override, expected.fov_override, "FieldOfView round-trips");
-    Check(written.discovery == expected.discovery, "Discovery round-trips");
-}
-
-// The port is the mod's one network-facing setting, and the check on it is fatal
-// rather than clamped: a mod that quietly listened on a port other than the one
-// the file names looks exactly like a tracker that never connected. So both ends
-// of the accepted range have to load and both rejections have to stop the load,
-// including the two shapes a hand-edited file actually carries - a 0 left behind
-// by "turn it off", and a 65536 written by counting from one.
-void ThePortIsHeldToTheUnprivilegedRange() {
-    metroex::Config low;
-    Check(low.LoadOrCreate(WriteIni("port_low", "[General]\nPort=1024\n").c_str()),
-          "the bottom of the unprivileged range loads");
-    Check(low.udp_port == 1024, "and is the port the mod listens on");
-
-    metroex::Config high;
-    Check(high.LoadOrCreate(WriteIni("port_high", "[General]\nPort=65535\n").c_str()),
-          "the top of the range loads");
-    Check(high.udp_port == 65535, "and is the port the mod listens on");
-
-    metroex::Config zero;
-    Check(!zero.LoadOrCreate(WriteIni("port_zero", "[General]\nPort=0\n").c_str()),
-          "port 0 fails the load rather than binding an ephemeral port nothing sends to");
-
-    metroex::Config privileged;
-    Check(!privileged.LoadOrCreate(WriteIni("port_priv", "[General]\nPort=1023\n").c_str()),
-          "a privileged port fails the load rather than binding nothing without saying so");
-
-    metroex::Config past;
-    Check(!past.LoadOrCreate(WriteIni("port_past", "[General]\nPort=65536\n").c_str()),
-          "a port past 65535 fails the load rather than wrapping to 0 in the uint16 it is "
-          "stored in");
-
-    metroex::Config negative;
-    Check(!negative.LoadOrCreate(WriteIni("port_neg", "[General]\nPort=-1\n").c_str()),
-          "and so does a negative one");
-}
-
-// A path the mod could not resolve has to fail the load rather than be handed to
-// the reader as-is. Every read and write here goes through
-// GetPrivateProfileString, which resolves a RELATIVE path against the Windows
-// directory - so a bare filename does not fail, it silently reads and writes
-// the player's settings somewhere they will never find them.
-void AnUnresolvableIniPathFailsTheLoad() {
-    metroex::Config cfg;
-    Check(!cfg.LoadOrCreate(""),
-          "an unresolved INI path fails the load rather than resolving against the Windows "
-          "directory");
+    Config read;
+    const cfg::ApplyReport report =
+        cfg::ApplyCanonical(cfg::ParseCanonicalIni("[CameraUnlock]\r\nConfigFormat=1\r\n[Camera]\r\nFieldOfView=30\r\n"),
+                            metroex::ConfigTable(), read);
+    Check(read.fov_override == 0.0f && report.diagnostics.size() == 1 &&
+              report.diagnostics[0].kind == cfg::CanonicalDiagnosticKind::InvalidValue,
+          "a FieldOfView outside its range keeps 0 and is reported");
 }
 
 }  // namespace
 
-int main() {
-    LimitYReachesBothBoundsWhenLimitYDownIsAbsent();
-    FieldOfViewIsOffByDefaultAndRefusesValuesOutsideItsRange();
-    AnExplicitLimitYDownStillWins();
-    ABoolWithATrailingCommentIsHonouredRatherThanDropped();
-    MalformedNumbersFallBackInsteadOfReachingTheCamera();
-    AConfigCarryingTheRetiredAdsCycleLoadsCleanly();
-    TheNavBindingsAreUnchanged();
-    YawModeDefaultsToWorldSpaceAndSitsOnPageDown();
-    TheGeneratedDefaultFileParsesBackAsTheStructDefaults();
-    ThePortIsHeldToTheUnprivilegedRange();
-    AnUnresolvableIniPathFailsTheLoad();
+int main(int argc, char** argv) {
+    try {
+        if (argc == 3 && std::strcmp(argv[1], "--render-config") == 0) {
+            WriteBytes(argv[2], Rendered());
+            std::printf("wrote %s\n", argv[2]);
+            return 0;
+        }
+        if (argc != 1) {
+            std::printf("usage: %s [--render-config <path>]\n", argv[0]);
+            return 2;
+        }
 
+        const std::string committed = ReadBytes(METROEX_COMMITTED_CONFIG);
+        Scratch scratch;
+        RenderTest(committed);
+        SeedTest(committed);
+        CreatedIsTheCommittedFile(scratch, committed);
+        SaveTests(scratch, committed);
+        FieldOfViewReadsZeroOrSixtyToOneTwenty();
+    } catch (const std::exception& e) {
+        Check(false, e.what());
+    }
     return metroex_test::Report();
 }

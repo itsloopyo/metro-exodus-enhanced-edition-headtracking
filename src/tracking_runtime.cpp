@@ -20,6 +20,20 @@ const char* ModeName(cameraunlock::TrackingMode mode) {
     return "rotation and position";
 }
 
+// The cycle HeadTrackingSession::CycleMode walks: rotation and position, rotation
+// only, position only, and round again.
+cameraunlock::TrackingMode NextMode(cameraunlock::TrackingMode mode) {
+    switch (mode) {
+        case cameraunlock::TrackingMode::RotationAndPosition:
+            return cameraunlock::TrackingMode::RotationOnly;
+        case cameraunlock::TrackingMode::RotationOnly:
+            return cameraunlock::TrackingMode::PositionOnly;
+        case cameraunlock::TrackingMode::PositionOnly:
+            break;
+    }
+    return cameraunlock::TrackingMode::RotationAndPosition;
+}
+
 const char* YawAxisName(bool worldSpaceYaw) {
     return worldSpaceYaw ? "world up-axis (horizon locked)" : "camera up-axis";
 }
@@ -29,52 +43,40 @@ const char* YawAxisName(bool worldSpaceYaw) {
 void TrackingRuntime::Start(const Config& cfg) {
     m_cfg = cfg;
 
-    cameraunlock::SensitivitySettings sens;
-    sens.yaw = m_cfg.sens_yaw;
-    sens.pitch = m_cfg.sens_pitch;
-    sens.roll = m_cfg.sens_roll;
-    sens.invert_yaw = m_cfg.invert_yaw;
-    sens.invert_pitch = m_cfg.invert_pitch;
-    sens.invert_roll = m_cfg.invert_roll;
-    m_session.GetProcessor().SetSensitivity(sens);
-
     // Both values go to the session; which one applies is decided per frame from
     // the packet source address, which Update() reads off the receiver itself.
     m_session.SetLocalSmoothing(m_cfg.local_smoothing);
     m_session.SetRemoteSmoothing(m_cfg.remote_smoothing);
 
-    cameraunlock::PositionSettings pos;
-    pos.sensitivity_x = m_cfg.pos_sens_x;
-    pos.sensitivity_y = m_cfg.pos_sens_y;
-    pos.sensitivity_z = m_cfg.pos_sens_z;
-    pos.limit_x = m_cfg.pos_limit_x;
-    pos.limit_y = m_cfg.pos_limit_y;
-    pos.limit_y_down = m_cfg.pos_limit_y_down;
-    pos.limit_z = m_cfg.pos_limit_z;
-    pos.limit_z_back = m_cfg.pos_limit_z_back;
     // SetPositionSettings, not GetPositionProcessor().SetSettings(): the session
     // owns the two smoothing values and recomposes them onto the struct.
-    m_session.SetPositionSettings(pos);
+    m_session.SetPositionSettings(m_cfg.position);
 
-    m_session.SetMode(m_cfg.position_enabled ? cameraunlock::TrackingMode::RotationAndPosition
-                                             : cameraunlock::TrackingMode::RotationOnly);
+    // The config table reads a pair that names no mode as its defaults, so the
+    // pair always decodes.
+    const cameraunlock::TrackingMode mode =
+        cameraunlock::DecodeTrackingMode(m_cfg.rotation_enabled, m_cfg.position_enabled).value();
+    m_session.SetMode(mode);
+    m_desiredMode.store(static_cast<int>(mode), std::memory_order_relaxed);
+    m_appliedMode.store(static_cast<int>(mode), std::memory_order_release);
+    Log::Line("Tracking mode: %s", ModeName(mode));
 
     m_receiver.SetLog([](const std::string& msg) { Log::Line("UDP: %s", msg.c_str()); });
 
     // Reported either way. "Did the tracker link come up" is the first question
     // a bug report has to answer, and a silent success leaves it answerable only
     // by the absence of a warning.
-    if (m_receiver.Start(m_cfg.udp_port)) {
-        Log::Line("Tracker: listening on UDP port %u", m_cfg.udp_port);
+    if (m_receiver.Start(static_cast<uint16_t>(m_cfg.udp_port))) {
+        Log::Line("Tracker: listening on UDP port %d", m_cfg.udp_port);
     } else {
-        Log::Line("WARN: UDP receiver did not bind immediately on port %u; background retry active",
+        Log::Line("WARN: UDP receiver did not bind immediately on port %d; background retry active",
                   m_cfg.udp_port);
     }
 
     m_worldSpaceYaw.store(m_cfg.world_space_yaw, std::memory_order_relaxed);
     Log::Line("Yaw axis: %s", YawAxisName(m_cfg.world_space_yaw));
 
-    m_enabled.store(m_cfg.enabled_on_startup, std::memory_order_release);
+    m_enabled.store(m_cfg.enable_on_startup, std::memory_order_release);
 }
 
 void TrackingRuntime::Stop() { m_receiver.Stop(); }
@@ -85,22 +87,28 @@ void TrackingRuntime::ToggleEnabled() {
     Log::Line("Tracking %s", !prev ? "enabled" : "disabled");
 }
 
-void TrackingRuntime::ToggleYawMode() {
+bool TrackingRuntime::ToggleYawMode() {
     const bool next = !m_worldSpaceYaw.load(std::memory_order_relaxed);
     m_worldSpaceYaw.store(next, std::memory_order_relaxed);
     Log::Line("Yaw axis: %s", YawAxisName(next));
+    return next;
 }
 
-void TrackingRuntime::CycleMode() {
+cameraunlock::TrackingMode TrackingRuntime::CycleMode() {
     // Applied on the render thread, so a cycle cannot land between the rotation
     // and position reads of one frame. Acknowledged here rather than there,
     // because on a build the camera hook could not land on there is no render
     // frame to apply it in and a key that logged nothing would read as a key
     // that does nothing. The wording promises only that the key was seen: the
-    // line naming the new mode comes from the frame that applies it, and on such
-    // a build it never comes.
-    m_modeCycleRequested.store(true, std::memory_order_release);
-    Log::Line("Tracking mode: cycle requested; it applies on the next frame the mod draws");
+    // line saying the mode applied comes from the frame that applies it, and on
+    // such a build it never comes.
+    const cameraunlock::TrackingMode next = NextMode(
+        static_cast<cameraunlock::TrackingMode>(m_appliedMode.load(std::memory_order_acquire)));
+    m_desiredMode.store(static_cast<int>(next), std::memory_order_relaxed);
+    m_modeRequested.store(true, std::memory_order_release);
+    Log::Line("Tracking mode: %s requested; it applies on the next frame the mod draws",
+              ModeName(next));
+    return next;
 }
 
 TrackingState TrackingRuntime::SamplePerFrame(bool inGameplay, bool aiming, HeadPose& out) {
@@ -116,8 +124,12 @@ TrackingState TrackingRuntime::SamplePerFrame(bool inGameplay, bool aiming, Head
     // The mode change is requested from the hotkey thread and applied here, on
     // the render thread, so a cycle can never land between the rotation and
     // position reads below and produce half of one mode and half of the next.
-    if (m_modeCycleRequested.exchange(false, std::memory_order_acq_rel)) {
-        Log::Line("Tracking mode: %s", ModeName(m_session.CycleMode()));
+    if (m_modeRequested.exchange(false, std::memory_order_acq_rel)) {
+        const auto desired =
+            static_cast<cameraunlock::TrackingMode>(m_desiredMode.load(std::memory_order_relaxed));
+        m_session.SetMode(desired);
+        m_appliedMode.store(static_cast<int>(desired), std::memory_order_release);
+        Log::Line("Tracking mode: %s", ModeName(desired));
     }
 
     const bool enabled = m_enabled.load(std::memory_order_acquire);

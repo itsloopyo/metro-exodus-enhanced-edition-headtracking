@@ -8,6 +8,7 @@
 #include "cameraunlock/protocol/udp_receiver.h"
 #include "cameraunlock/time/frame_clock.h"
 #include "cameraunlock/tracking/head_tracking_session.h"
+#include "cameraunlock/tracking/tracking_mode.h"
 
 #include <atomic>
 
@@ -32,14 +33,19 @@ public:
     TrackingState SamplePerFrame(bool inGameplay, bool aiming, HeadPose& out);
 
     void ToggleEnabled();
-    void CycleMode();
 
-    // Flips the yaw axis between the world up-axis and the camera's own. Called
-    // from the hotkey thread; the camera hook reads IsWorldSpaceYaw() per frame,
-    // so the switch lands on the very next frame and needs no restart. The
-    // choice is not written back to the INI: the config key is the mode the mod
-    // starts on, and a session change is a session change.
-    void ToggleYawMode();
+    // Asks for the tracking mode after the one the render thread last applied, and
+    // returns it. Called from the hotkey thread; the render thread applies it on its
+    // next frame. Stepping from the applied mode rather than from the last one asked
+    // for keeps two presses before one frame to one step, so the mode the caller
+    // saves is the mode the frame applies.
+    cameraunlock::TrackingMode CycleMode();
+
+    // Flips the yaw axis between the world up-axis and the camera's own, and
+    // returns the new setting (true: world up-axis). Called from the hotkey
+    // thread; the camera hook reads IsWorldSpaceYaw() per frame, so the switch
+    // lands on the very next frame and needs no restart.
+    bool ToggleYawMode();
 
     bool IsEnabled() const { return m_enabled.load(std::memory_order_relaxed); }
 
@@ -78,7 +84,12 @@ private:
     cameraunlock::time::FrameClock m_clock{kMaxFrameDtSec};
 
     std::atomic<bool> m_enabled{false};
-    std::atomic<bool> m_modeCycleRequested{false};
+
+    // The mode the hotkey thread asked for and the one the render thread last
+    // applied, as TrackingMode values. Both start on the configured mode.
+    std::atomic<int> m_desiredMode{0};
+    std::atomic<int> m_appliedMode{0};
+    std::atomic<bool> m_modeRequested{false};
 
     // Written from the hotkey thread, read by the camera hook on the render
     // thread. Initialised from the config in Start().

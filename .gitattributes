@@ -5,13 +5,9 @@
 *.bat text eol=crlf
 *.ps1 text eol=crlf
 
-# The shipped INI is a checked-in copy of what IniWriter produces at runtime, and
-# IniWriter writes CRLF. Under the `* text=auto eol=lf` above it would check out
-# LF, so package-release.ps1 would base64 an LF copy into launcher-manifest.json
-# on CI and a CRLF copy on a maintainer's machine - two ZIPs that differ for a
-# reason nothing reports, and a launcher-seeded config whose line endings differ
-# from a mod-written one on the same install.
-*.ini text eol=crlf
+# The committed settings file is byte-exact: the render test compares it with the
+# config table, and the launcher seed is its bytes.
+MetroExodusHeadTracking.ini -text
 
 # Binary files (do not normalize)
 *.png binary

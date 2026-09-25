@@ -40,22 +40,6 @@ std::basic_string<CharT> DirectoryOf(QueryName queryName, const CharT* separator
 
 }  // namespace
 
-std::string GetExePath(const char* filename) {
-    const std::string dir = DirectoryOf<char>(
-        [](char* buffer, DWORD size) { return GetModuleFileNameA(nullptr, buffer, size); },
-        "\\/");
-    if (dir.empty()) {
-        // Empty, never the bare filename. The consumer of this path is an INI
-        // read or write, and those run through GetPrivateProfileString, which
-        // resolves a RELATIVE path against the Windows directory - so returning
-        // the filename alone would quietly move the config out of the game
-        // folder and read defaults back from a file that is not the player's.
-        // An empty path fails the open instead, with the reason in the log.
-        return {};
-    }
-    return dir + filename;
-}
-
 std::wstring GetExePathW(const wchar_t* filename) {
     const std::wstring dir = DirectoryOf<wchar_t>(
         [](wchar_t* buffer, DWORD size) { return GetModuleFileNameW(nullptr, buffer, size); },

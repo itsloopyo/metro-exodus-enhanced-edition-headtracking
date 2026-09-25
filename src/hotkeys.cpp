@@ -2,7 +2,12 @@
 
 #include "logging.h"
 
-#include "cameraunlock/input/chord_hotkeys.h"
+#include "cameraunlock/input/key_binding_registration.h"
+#include "cameraunlock/input/key_bindings.h"
+
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 namespace metroex {
 
@@ -14,35 +19,35 @@ constexpr int kPollIntervalMs = 16;
 
 }  // namespace
 
+void Hotkeys::Register(const std::string& keys, const char* setting, Action action) {
+    const cameraunlock::input::KeyBindingsParseResult parsed = cameraunlock::input::ParseKeyBindings(keys);
+    if (!parsed.ok()) {
+        // The config table read the list with the same parser, so this is a bug.
+        throw std::logic_error(std::string(setting) + "=" + keys + " is not a key list: " + parsed.error);
+    }
+    // A plain key does not fire while Ctrl and Shift are both held, so Ctrl+Shift
+    // with that key reaches only a binding that names the chord.
+    cameraunlock::input::RegisterKeyBindings(m_poller, parsed.bindings, std::move(action));
+}
+
 bool Hotkeys::Start(const Config& cfg, Actions actions) {
     if (m_started) return true;
 
-    using cameraunlock::input::ChordGuarded;
-    using cameraunlock::input::NavGuarded;
-
-    m_poller.SetToggleKey(cfg.vk_toggle, NavGuarded(actions.toggle));
-    m_poller.AddHotkey(cfg.vk_cycle_mode, NavGuarded(actions.cycleMode));
-    m_poller.AddHotkey(cfg.vk_yaw_mode, NavGuarded(actions.yawMode));
-
-    // Chord alternatives on the same poller for keyboards without a nav cluster.
-    // ChordGuarded gates each action on the modifier state; NavGuarded above
-    // keeps the nav keys from firing as well while the chord is held.
-    if (cfg.chord_toggle) m_poller.AddHotkey('Y', ChordGuarded(actions.toggle));
-    if (cfg.chord_cycle_mode) m_poller.AddHotkey('G', ChordGuarded(actions.cycleMode));
-    if (cfg.chord_yaw_mode) m_poller.AddHotkey('H', ChordGuarded(actions.yawMode));
+    Register(cfg.toggle_key_name, "ToggleKey", std::move(actions.toggle));
+    Register(cfg.cycle_tracking_mode_key_name, "CycleTrackingModeKey", std::move(actions.cycleMode));
+    Register(cfg.yaw_mode_key_name, "YawModeKey", std::move(actions.yawMode));
 
     if (!m_poller.Start(kPollIntervalMs)) {
         Log::Line("ERROR: HotkeyPoller failed to start");
         return false;
     }
 
-    Log::Line("Hotkeys: toggle=0x%02X cycleMode=0x%02X yawMode=0x%02X chords(Y/G/H)=%d/%d/%d",
-              cfg.vk_toggle, cfg.vk_cycle_mode, cfg.vk_yaw_mode, cfg.chord_toggle ? 1 : 0,
-              cfg.chord_cycle_mode ? 1 : 0, cfg.chord_yaw_mode ? 1 : 0);
+    Log::Line("Hotkeys: ToggleKey=%s, CycleTrackingModeKey=%s, YawModeKey=%s",
+              cfg.toggle_key_name.c_str(), cfg.cycle_tracking_mode_key_name.c_str(),
+              cfg.yaw_mode_key_name.c_str());
 
     m_started = true;
     return true;
 }
-
 
 }  // namespace metroex

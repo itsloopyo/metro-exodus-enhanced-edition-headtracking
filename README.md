@@ -59,9 +59,11 @@ Placing the files by hand takes three copies into the folder holding
 2. `plugins\MetroExodusHeadTracking.asi`.
 3. `plugins\MetroExodusHeadTracking.ini`, only if you do not already have one.
    The installer never overwrites an existing config and neither should you.
+   Leaving it out is fine too: the mod writes the file on its first start.
 
-The Nexus ZIP is already laid out this way: extract it straight into the folder
-holding `MetroExodus.exe` and the files land where they belong.
+The Nexus ZIP is laid out the same way, without the config: extract it straight
+into the folder holding `MetroExodus.exe` and the files land where they belong,
+and the mod writes `MetroExodusHeadTracking.ini` on its first start.
 
 ## Setting Up OpenTrack
 
@@ -117,7 +119,9 @@ get the remote value. The classifier sees a transport, not a machine.
 
 ## Controls
 
-Two equivalent binding sets, use whichever your keyboard has:
+Two equivalent binding sets by default, use whichever your keyboard has. Both are
+lists in the `[Hotkeys]` section of the config, so you can rebind either or add
+more (see [Configuration](#configuration)).
 
 | Action              | Nav-cluster | Chord           |
 |---------------------|-------------|-----------------|
@@ -137,8 +141,10 @@ rotation only, then position only, then back to rotation and position.
    pitches turning your head leans the view instead. Some players prefer it for
    climbing and vehicle sections.
 
-The switch applies immediately and is not written back to the INI, so the next
-launch starts on whatever `WorldSpaceYaw` says.
+The tracking mode and the yaw mode are saved to the config the moment you
+change them (`RotationEnabled`, `PositionEnabled` and `WorldSpaceYaw`), so the
+next launch starts where you left them. `End` / `Ctrl+Shift+Y` changes the
+current session only; whether tracking is on at launch is `EnableOnStartup`.
 
 ### Aiming down sights
 
@@ -173,82 +179,118 @@ Two things follow from that, and both are worth knowing before you play:
 
 ## Configuration
 
-`MetroExodusHeadTracking.ini` is written next to `MetroExodus.exe` on first
-launch. Edit it with the game closed and restart to apply. Delete it to reset to
-defaults. Every key it holds is below, at its default, with the file's own
-comments shortened.
+<!-- cameraunlock:config -->
+The mod reads its settings from `MetroExodusHeadTracking.ini` in the game folder, and creates the file when it starts and finds none. Edit it with any text editor.
+
+Earlier versions of the mod used an older layout for this file. The first time this version starts, it converts the file once into the layout below and keeps the file as it was beside it as `MetroExodusHeadTracking.ini.pre-canonical`. `MetroExodusHeadTracking.ini.pre-canonical.last`, when present, is the file as it was before the most recent conversion: the mod converts the file again when it finds the older layout later, for example after an older version of the mod rewrote it.
+
+Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
+
+- Reticle settings, and a key that toggled the reticle.
+- A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
+- The setting for a feature that earlier versions shipped switched off while it was untested. It now follows the mod's default.
+
+An older version of the mod may not read the new layout correctly. It reads a key that moved as its own default, and it can misread a hotkey or another value that is now written as a name. To go back to an older version, first copy `MetroExodusHeadTracking.ini.pre-canonical` back over `MetroExodusHeadTracking.ini`, which restores the old file.
+
+With every setting at its default, the file reads:
 
 ```ini
-[General]
-EnableOnStartup=1
-; UDP port to listen on, 1024 to 65535. A value outside that range stops the mod
-; loading rather than being ignored.
-Port=4242
-; Which up-axis head yaw turns about.
-;   true  - the world up-axis. Look at the floor and turn your head and you
-;           still pan across it, level with the horizon.
-;   false - the camera's own up-axis, which leans the view once the camera is
-;           pitched steeply.
-; Page Down switches between the two while you play; this key is only what the
-; mod starts on.
-WorldSpaceYaw=1
+; Metro Exodus Enhanced Edition head tracking settings.
+; Comments start with ; and go on their own line. Text after a value is part of the value.
+; Hotkeys are key names such as End, PageUp or Ctrl+Shift+Y. Separate several with commas; leave empty for none.
 
-[Sensitivity]
-Yaw=1
-Pitch=1
-Roll=1
-InvertYaw=0
-InvertPitch=0
-InvertRoll=0
+[CameraUnlock]
+; Written by the mod. Leave this section in place.
+ConfigFormat=1
+
+[Network]
+; UDP port the mod receives tracker data on (OpenTrack protocol).
+UdpPort=4242
+
+[General]
+; true: head tracking is on when the game starts. ToggleKey turns it on and off.
+EnableOnStartup=true
+; true: yaw turns around the world's up axis. false: around the camera's own up axis.
+WorldSpaceYaw=true
+; true: turning your head turns the view.
+; Tracking mode at startup, with PositionEnabled. The mode hotkey changes both.
+RotationEnabled=true
 
 [Smoothing]
-; Smoothing applied when the tracker runs on this machine (loopback).
-; 0 = no smoothing, 1 = heavy.
-LocalSmoothing=0
-; Smoothing applied when the tracker is a remote device on the network.
+; Smoothing when the tracker runs on this PC. 0 is the least, 1 the most.
+LocalSmoothing=0.0
+; Smoothing when the tracker is another device on the network, such as a phone.
+; 0 is the least, 1 the most.
 RemoteSmoothing=0.15
 
 [Position]
-; Positional (6DOF) head tracking: leaning and moving your head.
-Enabled=1
-SensitivityX=1
-SensitivityY=1
-SensitivityZ=1
-; Travel limits in metres.
-LimitX=0.3
-LimitY=0.2
-LimitYDown=0.2
-LimitZ=0.4
-LimitZBack=0.1
+; true: moving your head moves the view.
+; Tracking mode at startup, with RotationEnabled. The mode hotkey changes both.
+PositionEnabled=true
+; How far, in metres, leaning left or right can move the view.
+PositionLimitX=0.3
+; How far, in metres, raising your head can move the view.
+PositionLimitY=0.2
+; How far, in metres, lowering your head can move the view.
+PositionLimitYDown=0.2
+; How far, in metres, leaning forward can move the view.
+PositionLimitZ=0.4
+; How far, in metres, leaning back can move the view.
+PositionLimitZBack=0.1
 
 [Hotkeys]
-; Virtual-key codes. Defaults: End (toggle tracking), Page Up (cycle mode:
-; rotation and position, rotation only, position only).
-Toggle=0x23
-CycleMode=0x21
-YawMode=0x22
-; Chord alternatives: Ctrl+Shift+Y (toggle tracking), Ctrl+Shift+G (cycle
-; mode), Ctrl+Shift+H (yaw mode).
-ChordToggle=1
-ChordCycleMode=1
-ChordYawMode=1
+; Turns head tracking on and off.
+ToggleKey=End, Ctrl+Shift+Y
+; Changes the tracking mode: rotation and position, rotation only, position only.
+CycleTrackingModeKey=PageUp, Ctrl+Shift+G
+; Switches yaw between the world's up axis and the camera's own (WorldSpaceYaw).
+YawModeKey=PageDown, Ctrl+Shift+H
+
+[Light]
+; true: a light you carry points where you look instead of where you aim.
+LightFollowsHead=true
+; How far the light turns for each degree your head turns.
+; 1 matches the view, 0 keeps the light on your aim.
+LightMultiplier=1.5
 
 [Camera]
-; Field of view in degrees, the same number the game's own Field of View slider
-; sets. 0 leaves that slider alone. The game stops its slider at 75, and its
-; engine holds the drawn picture at 60 in a level whatever the slider says; a
-; value here goes past both, up to 120. Setting it also takes the engine's hold
-; off, which is six bytes written into the running game's code, and it widens
-; the bounds the game's own setter enforces. The setting and its bounds are put
-; back when the game exits; the six bytes live only in memory and go with the
-; process. Accepted: 0, or 60 to 120. Anything else stops the mod loading.
-FieldOfView=0
-; Per-frame camera logging: the pose the tracker sent, the camera the game
-; published, and the camera the engine built the frame from. It is how a game
-; patch that moved the camera gets re-derived. It writes megabytes an hour to
-; the log; leave it off.
-Discovery=0
+; Field of view in degrees, the number the game's own Field of View slider sets.
+; 0 leaves that slider alone; otherwise 60 to 120. The game stops its slider at 75, and
+; its engine holds the picture at 60 in a level whatever the slider says; a value here
+; goes past both. Setting it writes six bytes into the running game's code to take that
+; hold off, and widens the bounds the game's own setter enforces. The setting and its
+; bounds are put back when the game exits. The main menu draws at 60 either way.
+FieldOfView=0.0
+; true: write the pose the tracker sent, the camera the game published and the camera
+; the engine built the frame from to HeadTracking.log every frame. It writes megabytes
+; an hour; leave it false unless you were asked to turn it on.
+Discovery=false
 ```
+<!-- /cameraunlock:config -->
+
+The mod reads the file when the game starts, so an edit takes effect at the next
+launch.
+
+Changed from earlier versions, beyond what the conversion drops:
+
+- `[Sensitivity]` (`Yaw`, `Pitch`, `Roll`, `InvertYaw`, `InvertPitch`,
+  `InvertRoll`) and `[Position] SensitivityX`, `SensitivityY` and `SensitivityZ`
+  are gone. Every one of them shipped at 1 or false, so the default view is
+  unchanged; a value you changed is dropped and named in `HeadTracking.log`.
+- `[General] Port` is `[Network] UdpPort`, `[Position] Enabled` is the
+  `RotationEnabled` / `PositionEnabled` pair, and the limits are
+  `PositionLimitX`, `PositionLimitY`, `PositionLimitYDown`, `PositionLimitZ` and
+  `PositionLimitZBack`.
+- `[Hotkeys] Toggle`, `CycleMode` and `YawMode` (virtual-key codes) and the
+  `ChordToggle`, `ChordCycleMode` and `ChordYawMode` switches are one key list
+  per action: `ToggleKey`, `CycleTrackingModeKey` and `YawModeKey`. A chord you
+  had switched off is left out of its list.
+- A value the mod cannot use no longer stops it loading: the line is named in
+  `HeadTracking.log` and the setting keeps its default. That covers a
+  `FieldOfView` that is neither 0 nor 60 to 120, and `UdpPort` now takes 1 to
+  65535. An old file that the previous version refused for its port or its
+  field of view is left as it is, and the mod still does not start until you fix
+  that value.
 
 Four things to know about `FieldOfView`:
 
@@ -379,9 +421,9 @@ ctest --test-dir build -C Release
 
 ## Community & Support
 
-- [Discord](https://discord.com/invite/dxyZdyFNT9) - setup help, bug reports, and new-release announcements
-- [Lopari](https://lopari.app) - free Windows launcher with one-click install and launch of head-tracking mods
-- [Headcam](https://headcam.app) - free app that turns your phone into a head tracker
+- Discord: [Loop's Head Tracking Hangout](https://discord.com/invite/dxyZdyFNT9) - setup help, bug reports, and new-release announcements
+- [Lopari](https://lopari.app) - free Windows launcher with one-click install and launch for the released head-tracking mods
+- [Headcam](https://headcam.app) - free app that turns your iPhone or Android phone into the head tracker
 
 ## License
 

@@ -146,21 +146,13 @@ function(add_metroex_test name)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
-# The INI contract: what the file the player edits means, and what an absent or
-# malformed key falls back to.
+# The committed MetroExodusHeadTracking.ini against the config table, the launcher seed
+# against the committed file, and the saves the hotkeys make. With `--render-config <path>`
+# the binary writes the rendered file instead; `pixi run render-config` runs it that way.
 add_metroex_test(metroex_config_tests tests/config_tests.cpp src/config.cpp
     src/legacy_config/legacy_config.cpp)
-
-# The INI that ships in the release ZIP, and the base64 copy of it inside
-# launcher-manifest.json, against the one the mod writes for itself. Three copies
-# of the same file kept in step by hand, and nothing compared them, which is how
-# the shipped [Camera] comment came to omit that a non-zero FieldOfView writes
-# six bytes into the running game's code - and how the manifest kept omitting it
-# after the shipped copy was fixed.
-add_metroex_test(metroex_shipped_ini_tests tests/shipped_ini_tests.cpp src/config.cpp
-    src/legacy_config/legacy_config.cpp)
-target_compile_definitions(metroex_shipped_ini_tests PRIVATE
-    METROEX_SHIPPED_INI="${CMAKE_CURRENT_SOURCE_DIR}/MetroExodusHeadTracking.ini"
+target_compile_definitions(metroex_config_tests PRIVATE
+    METROEX_COMMITTED_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/MetroExodusHeadTracking.ini"
     METROEX_LAUNCHER_MANIFEST="${CMAKE_CURRENT_SOURCE_DIR}/launcher-manifest.json")
 
 # The lean easing out while the sights are up, and the verdict walk that decides
@@ -213,19 +205,27 @@ add_metroex_test(metroex_udp_recovery_tests
     src/legacy_config/legacy_config.cpp
 )
 
-# The config differential test: the dev pre-release's reader (the oracle, a71df8b) against the
-# frozen reader in src/legacy_config, over the file that build shipped, its first-run output and
-# core's mutation corpus. check-frozen.ps1 fails when a frozen file or a core source it compiles
-# has changed since frozen.tsv recorded it.
+# The config differential test: the dev pre-release's reader (the oracle, a71df8b), the frozen
+# reader in src/legacy_config and the migration to the canonical file, over the file that build
+# shipped, its first-run output and core's mutation corpus. lint-migrated.mjs then runs core's
+# canonical config lint over the committed file and every file the migration wrote.
+# check-frozen.ps1 fails when a frozen file or a core source it compiles has changed since
+# frozen.tsv recorded it.
 add_metroex_test(metroex_config_differential
     tests/config_differential/differential_tests.cpp
     tests/config_differential/oracle/oracle_config.cpp
     src/legacy_config/legacy_config.cpp
+    src/config.cpp
 )
 target_include_directories(metroex_config_differential PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential)
 target_compile_definitions(metroex_config_differential PRIVATE
-    METROEX_DIFFERENTIAL_INPUTS="${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/inputs")
+    METROEX_DIFFERENTIAL_INPUTS="${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/inputs"
+    METROEX_COMMITTED_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/MetroExodusHeadTracking.ini")
+add_test(NAME metroex_config_lint
+    COMMAND node ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/lint-migrated.mjs
+            $<TARGET_FILE_DIR:metroex_config_differential>/migrated)
+set_tests_properties(metroex_config_lint PROPERTIES DEPENDS metroex_config_differential)
 add_test(NAME metroex_config_frozen
     COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/check-frozen.ps1)

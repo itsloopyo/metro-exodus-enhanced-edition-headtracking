@@ -32,7 +32,7 @@ if (-not (Test-Path $releaseDir)) { New-Item -ItemType Directory -Path $releaseD
 $asiPath = Join-Path $projectDir "bin/Release/MetroExodusHeadTracking.asi"
 if (-not (Test-Path $asiPath)) { throw "MetroExodusHeadTracking.asi not found at: $asiPath" }
 
-# The mod loads its INI by module-relative name (src/dllmain.cpp), so the
+# The mod loads its INI by name from beside MetroExodus.exe (kConfigFileName in src/config.h), so the
 # shipped artifact must be named MetroExodusHeadTracking.ini or nothing reads it.
 $iniPath = Join-Path $projectDir "MetroExodusHeadTracking.ini"
 if (-not (Test-Path $iniPath)) { throw "MetroExodusHeadTracking.ini not found at: $iniPath" }
@@ -163,8 +163,9 @@ New-Item -ItemType Directory -Path $nexusStagingDir -Force | Out-Null
 
 Copy-Item $asiPath -Destination $nexusStagingDir -Force
 Write-Host "  MetroExodusHeadTracking.asi" -ForegroundColor Green
-Copy-Item $iniPath -Destination $nexusStagingDir -Force
-Write-Host "  MetroExodusHeadTracking.ini" -ForegroundColor Green
+# No MetroExodusHeadTracking.ini. This archive extracts over the game folder, so a
+# config in it would put the default file over the player's own, and an older file
+# would never be converted. The mod writes the file on its first start.
 
 # The loader ships here even though a Nexus ZIP normally carries payload only.
 # A BepInEx mod can leave the loader out because the user installed BepInEx as

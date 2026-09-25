@@ -282,7 +282,7 @@ bool CameraHook::Initialise(const Config& cfg, TrackingRuntime& tracking) {
     g_ads.Initialise();
     g_fov.Initialise(cfg);
     g_reticle.Initialise();
-    g_torch.Initialise(cfg.light_follows_head, cfg.light_multiplier, cfg.discovery);
+    g_torch.Initialise(cfg.light.follows_head, cfg.light.multiplier, cfg.discovery);
 
     const ResolvedBuild build = ResolveRunningBuild();
     if (const char* cause = BuildLookupCause(build.outcome)) {
