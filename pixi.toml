@@ -34,8 +34,9 @@ test = { cmd = "ctest --test-dir build -C Debug --output-on-failure", depends-on
 # difference would otherwise reach a player with nothing having run against it.
 test-release = { cmd = "ctest --test-dir build -C Release --output-on-failure", depends-on = ["build"] }
 
-# Rewrites MetroExodusHeadTracking.ini from the config table after a change to a row, a
-# comment or a default, then re-encodes the launcher-manifest.json seed from it. The config
+# Rewrites MetroExodusHeadTracking.ini, the table's fresh render and the bytes a first start
+# writes to CameraUnlock.ini, after a change to a row, a comment or a default, then writes the
+# per_game of launcher-manifest.json's config descriptor from it. It writes no seed. The config
 # tests fail until it has run.
 render-config = { cmd = "build/Debug/metroex_config_tests.exe --render-config MetroExodusHeadTracking.ini && node cameraunlock-core/scripts/encode-seed.mjs", depends-on = ["build-debug"] }
 

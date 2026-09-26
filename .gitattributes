@@ -6,7 +6,7 @@
 *.ps1 text eol=crlf
 
 # The committed settings file is byte-exact: the render test compares it with the
-# config table, and the launcher seed is its bytes.
+# config table's fresh render, the bytes a first start writes to CameraUnlock.ini.
 MetroExodusHeadTracking.ini -text
 
 # Binary files (do not normalize)

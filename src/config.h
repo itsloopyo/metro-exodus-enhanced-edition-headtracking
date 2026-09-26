@@ -2,6 +2,7 @@
 
 #include "cameraunlock/config/config_owner.h"
 #include "cameraunlock/config/config_table.h"
+#include "cameraunlock/config/defaults_file.h"
 #include "cameraunlock/config/head_tracking_config.h"
 #include "cameraunlock/config/legacy_import.h"
 #include "cameraunlock/config/value_codecs.h"
@@ -20,7 +21,7 @@ enum class ReadStatus;
 // line names it.
 constexpr char kGameDisplayName[] = "Metro Exodus Enhanced Edition";
 
-// Beside the exe, like the log, and NOT beside the .asi.
+// Both beside the exe, like the log, and NOT beside the .asi.
 //
 // Ultimate ASI Loader scans `scripts\` and `plugins\` as well as the exe
 // directory, so the two can be different folders. When they are, an .asi-relative
@@ -28,7 +29,12 @@ constexpr char kGameDisplayName[] = "Metro Exodus Enhanced Edition";
 // default file there, and the one at the game root that the README, the Nexus
 // page and the launcher manifest all name is read by nobody. Resolving beside the
 // exe makes the config, the log and every document agree on one directory.
-constexpr wchar_t kConfigFileName[] = L"MetroExodusHeadTracking.ini";
+constexpr wchar_t kConfigFileName[] = L"CameraUnlock.ini";
+
+// The file every build before the canonical format read. The owner imports it while
+// CameraUnlock.ini is absent and never writes, renames or deletes it, so an older build
+// still reads it after a rollback.
+constexpr wchar_t kLegacyConfigFileName[] = L"MetroExodusHeadTracking.ini";
 
 struct Config : cameraunlock::HeadTrackingConfig {
     // Field of view in degrees, or 0 to leave the game's own setting alone.
@@ -78,6 +84,10 @@ cameraunlock::config::LegacyImport<Config> LegacyConfigImport();
 cameraunlock::config::ImportResult MapLegacyConfig(legacy::ReadStatus status, const legacy::Config& read,
                                                    Config& out);
 
-cameraunlock::config::ConfigOwnerOptions<Config> ConfigOwnerOptionsFor(const std::wstring& path);
+// `path` is CameraUnlock.ini and `legacyPath` the MetroExodusHeadTracking.ini beside it, both
+// fully qualified. The mod passes DefaultsFile::PerUser() and a test a scratch file.
+cameraunlock::config::ConfigOwnerOptions<Config> ConfigOwnerOptionsFor(const std::wstring& path,
+                                                                       const std::wstring& legacyPath,
+                                                                       cameraunlock::config::DefaultsFile defaults);
 
 }  // namespace metroex

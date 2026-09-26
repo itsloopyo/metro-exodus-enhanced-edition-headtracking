@@ -146,14 +146,14 @@ function(add_metroex_test name)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
-# The committed MetroExodusHeadTracking.ini against the config table, the launcher seed
-# against the committed file, and the saves the hotkeys make. With `--render-config <path>`
-# the binary writes the rendered file instead; `pixi run render-config` runs it that way.
+# The committed MetroExodusHeadTracking.ini against the config table's fresh render, the
+# CameraUnlock.ini a first start creates, and the saves the hotkeys make. With
+# `--render-config <path>` the binary writes the rendered file instead; `pixi run
+# render-config` runs it that way.
 add_metroex_test(metroex_config_tests tests/config_tests.cpp src/config.cpp
     src/legacy_config/legacy_config.cpp)
 target_compile_definitions(metroex_config_tests PRIVATE
-    METROEX_COMMITTED_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/MetroExodusHeadTracking.ini"
-    METROEX_LAUNCHER_MANIFEST="${CMAKE_CURRENT_SOURCE_DIR}/launcher-manifest.json")
+    METROEX_COMMITTED_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/MetroExodusHeadTracking.ini")
 
 # The lean easing out while the sights are up, and the verdict walk that decides
 # whether the pose reaches the view at all. Both are pure functions, so neither

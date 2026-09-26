@@ -133,15 +133,17 @@ DWORD WINAPI InitThread(LPVOID) {
                   kConfigFileName);
         return 0;
     }
-    g_configOwner.emplace(ConfigOwnerOptionsFor(iniPath));
+    g_configOwner.emplace(ConfigOwnerOptionsFor(iniPath, GetExePathW(kLegacyConfigFileName),
+                                                cameraunlock::config::DefaultsFile::PerUser()));
     cameraunlock::config::ConfigLoadResult<Config> loaded = g_configOwner->Load();
     LogLines(loaded.log);
     Log::Line("Config: %ls (%s)", iniPath.c_str(),
               cameraunlock::config::ConfigLoadStatusName(loaded.status));
     if (!loaded.reason.empty()) Log::Line("WARN: %s", loaded.reason.c_str());
-    // The build before the canonical format did not start on a file it refused (a
-    // port outside 1024-65535, a field of view that is neither 0 nor 60 to 120),
-    // so this one does not either until the player fixes it.
+    // The build before the canonical format did not start on a MetroExodusHeadTracking.ini
+    // it refused (a port outside 1024-65535, a field of view that is neither 0 nor 60 to
+    // 120), so this one does not either while CameraUnlock.ini is absent and the player
+    // has not fixed it.
     if (loaded.status == cameraunlock::config::ConfigLoadStatus::LegacyRefused) {
         Log::Line("ERROR: %ls could not be loaded; head tracking is not starting", iniPath.c_str());
         return 0;

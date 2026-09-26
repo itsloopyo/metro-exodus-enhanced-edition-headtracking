@@ -1,8 +1,9 @@
-// The committed config, the launcher seed, the owner's saves and the one codec of the mod's own.
+// The committed config, the file a first start creates, the owner's saves and the one codec of
+// the mod's own.
 //
-// `--render-config <path>` writes the table's defaults, rendered, to <path> and exits without
-// running the tests; `pixi run render-config` uses it to rewrite the committed file after a
-// change to a row, a comment or a default.
+// `--render-config <path>` writes the table's fresh render to <path> and exits without running
+// the tests; `pixi run render-config` uses it to rewrite the committed file after a change to a
+// row, a comment or a default.
 
 #include "config.h"
 #include "test_harness.h"
@@ -12,12 +13,12 @@
 
 #include <windows.h>
 
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -42,8 +43,7 @@ void WriteBytes(const fs::path& path, const std::string& bytes) {
 }
 
 std::string Rendered() {
-    const cfg::ConfigTable<Config> table = metroex::ConfigTable();
-    return cfg::RenderCanonical(table, table.defaults(), cfg::RenderHeader{metroex::kGameDisplayName});
+    return cfg::RenderCanonicalFresh(metroex::ConfigTable(), cfg::RenderHeader{metroex::kGameDisplayName});
 }
 
 std::vector<std::string> Lines(const std::string& bytes) {
@@ -82,40 +82,36 @@ public:
         std::error_code ec;
         fs::remove_all(root_, ec);
     }
-    fs::path Fresh(const std::string& leaf) {
+    // An empty game folder.
+    fs::path Folder(const std::string& leaf) {
         const fs::path dir = root_ / leaf;
         fs::create_directories(dir);
-        return dir / metroex::kConfigFileName;
+        return dir;
     }
+    // A Defaults.ini path of the folder's own, outside it.
+    fs::path Defaults(const std::string& leaf) { return root_ / (leaf + "-global") / "Defaults.ini"; }
 
 private:
     fs::path root_;
 };
 
-// Enough base64 to read one JSON string value back. It refuses anything outside the alphabet
-// rather than skipping it, so a blob the launcher would choke on fails here.
-bool DecodeBase64(const std::string& encoded, std::string& out) {
-    static const char kAlphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    out.clear();
-    uint32_t accumulator = 0;
-    int bits = 0;
-    size_t padding = 0;
-    for (const char c : encoded) {
-        if (c == '=') {
-            ++padding;
-            continue;
-        }
-        if (padding != 0 || c == '\0') return false;
-        const char* found = std::strchr(kAlphabet, c);
-        if (found == nullptr) return false;
-        accumulator = (accumulator << 6) | static_cast<uint32_t>(found - kAlphabet);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out.push_back(static_cast<char>((accumulator >> bits) & 0xFF));
-        }
+cfg::ConfigOwnerOptions<Config> Options(const fs::path& folder, const fs::path& defaults) {
+    return metroex::ConfigOwnerOptionsFor((folder / metroex::kConfigFileName).wstring(),
+                                          (folder / metroex::kLegacyConfigFileName).wstring(),
+                                          cfg::DefaultsFile::At(defaults.wstring()));
+}
+
+std::set<std::string> Names(const fs::path& dir) {
+    std::set<std::string> names;
+    for (const auto& entry : fs::directory_iterator(dir)) names.insert(entry.path().filename().string());
+    return names;
+}
+
+bool LogSays(const std::vector<std::string>& log, const std::string& text) {
+    for (const std::string& line : log) {
+        if (line.find(text) != std::string::npos) return true;
     }
-    return padding <= 2;
+    return false;
 }
 
 void RenderTest(const std::string& committed) {
@@ -128,41 +124,45 @@ void RenderTest(const std::string& committed) {
           "the committed file draws no table diagnostics");
 }
 
-// The launcher writes the config from the manifest's own base64, so it has to be the committed
-// file byte for byte. encode-seed.mjs rewrites it; this is what fails when nobody ran it.
-void SeedTest(const std::string& committed) {
-    const std::string manifest = ReadBytes(METROEX_LAUNCHER_MANIFEST);
-    const std::string field = "\"content_b64\"";
-    const size_t at = manifest.find(field);
-    Check(at != std::string::npos, "launcher-manifest.json carries a seed");
-    if (at == std::string::npos) return;
-    const size_t open = manifest.find('"', manifest.find(':', at + field.size()) + 1);
-    const size_t close = manifest.find('"', open + 1);
-    std::string seed;
-    Check(DecodeBase64(manifest.substr(open + 1, close - open - 1), seed), "the seed is base64");
-    Check(seed == committed, "the launcher seed is the committed file; run pixi run render-config");
-    Check(manifest.find(field, close) == std::string::npos, "launcher-manifest.json carries one seed");
-}
-
 void CreatedIsTheCommittedFile(Scratch& scratch, const std::string& committed) {
-    const fs::path created = scratch.Fresh("created");
-    cfg::ConfigOwner<Config> fresh(metroex::ConfigOwnerOptionsFor(created.wstring()));
-    Check(fresh.Load().status == cfg::ConfigLoadStatus::Created, "no file loads as Created");
-    Check(ReadBytes(created) == committed, "the created file is the committed file");
+    const fs::path folder = scratch.Folder("created");
+    const fs::path defaults = scratch.Defaults("created");
+    const cfg::ConfigLoadResult<Config> loaded = cfg::ConfigOwner<Config>(Options(folder, defaults)).Load();
+    Check(loaded.status == cfg::ConfigLoadStatus::Created, "no file loads as Created");
+    Check(ReadBytes(folder / metroex::kConfigFileName) == committed,
+          "the created CameraUnlock.ini is the committed file");
+    Check(Names(folder) == std::set<std::string>{"CameraUnlock.ini"},
+          "a first start with no legacy file creates CameraUnlock.ini and nothing else beside it");
+    Check(fs::exists(defaults), "a first start creates Defaults.ini where the options name it");
 }
 
+// Every save starts from the committed file, whose global rows hold default. A save writes the
+// value in place of default, changes the lines of its own rows and no other byte, and touches
+// neither Defaults.ini nor the legacy file beside CameraUnlock.ini.
 void SaveTests(Scratch& scratch, const std::string& committed) {
-    const fs::path file = scratch.Fresh("saves");
+    const fs::path folder = scratch.Folder("saves");
+    const fs::path defaults = scratch.Defaults("saves");
+    const fs::path file = folder / metroex::kConfigFileName;
+    const fs::path legacy = folder / metroex::kLegacyConfigFileName;
+    const std::string legacyBytes = "[General]\r\nWorldSpaceYaw=0\r\n";
     WriteBytes(file, committed);
-    cfg::ConfigOwner<Config> owner(metroex::ConfigOwnerOptionsFor(file.wstring()));
-    Check(owner.Load().status == cfg::ConfigLoadStatus::Canonical, "the committed file loads as Canonical");
+    WriteBytes(legacy, legacyBytes);
+    cfg::ConfigOwner<Config> owner(Options(folder, defaults));
+    const cfg::ConfigLoadResult<Config> first = owner.Load();
+    Check(first.status == cfg::ConfigLoadStatus::Canonical, "the committed file loads as Canonical");
+    Check(first.config.world_space_yaw, "CameraUnlock.ini is read and the legacy file is not");
+    Check(LogSays(first.log, "is left as it was and is not read"),
+          "the load logs that the legacy file beside CameraUnlock.ini is not read");
+    const std::string defaultsBytes = ReadBytes(defaults);
 
     std::string before = ReadBytes(file);
-    Check(owner.Save([](Config& c) { c.world_space_yaw = false; }).status == cfg::ConfigSaveStatus::Saved,
-          "the yaw mode saves");
+    const cfg::ConfigSaveResult saved = owner.Save([](Config& c) { c.world_space_yaw = false; });
+    Check(saved.status == cfg::ConfigSaveStatus::Saved, "the yaw mode saves");
+    Check(LogSays(saved.log, "WorldSpaceYaw=false is now set for this game, and no longer follows Defaults.ini."),
+          "the yaw mode save logs that its row stopped following Defaults.ini");
     std::vector<std::string> changed = ChangedLines(before, ReadBytes(file));
-    Check(changed.size() == 1 && changed[0] == "WorldSpaceYaw=true -> WorldSpaceYaw=false",
-          "the yaw mode save changes its own line and no other");
+    Check(changed.size() == 1 && changed[0] == "WorldSpaceYaw=default -> WorldSpaceYaw=false",
+          "the yaw mode save writes its value over default and changes no other line");
 
     before = ReadBytes(file);
     Check(owner.Save([](Config& c) {
@@ -171,8 +171,9 @@ void SaveTests(Scratch& scratch, const std::string& committed) {
           }).status == cfg::ConfigSaveStatus::Saved,
           "rotation only saves");
     changed = ChangedLines(before, ReadBytes(file));
-    Check(changed.size() == 1 && changed[0] == "PositionEnabled=true -> PositionEnabled=false",
-          "the rotation-only save changes its own line and no other");
+    Check(changed.size() == 2 && changed[0] == "RotationEnabled=default -> RotationEnabled=true" &&
+              changed[1] == "PositionEnabled=default -> PositionEnabled=false",
+          "the rotation-only save writes both rows of the pair over default and changes no other line");
 
     before = ReadBytes(file);
     Check(owner.Save([](Config& c) {
@@ -194,10 +195,14 @@ void SaveTests(Scratch& scratch, const std::string& committed) {
     }
     Check(threw, "EnableOnStartup is not Writable: End never persists");
     Check(ReadBytes(file) == before, "a refused save writes nothing");
+    Check(ReadBytes(defaults) == defaultsBytes, "no save writes Defaults.ini");
+    Check(ReadBytes(legacy) == legacyBytes, "no save writes the legacy file");
+    Check(Names(folder) == std::set<std::string>{"CameraUnlock.ini", "MetroExodusHeadTracking.ini"},
+          "the saves leave no other file beside CameraUnlock.ini");
 
-    cfg::ConfigOwner<Config> restarted(metroex::ConfigOwnerOptionsFor(file.wstring()));
-    const cfg::ConfigLoadResult<Config> loaded = restarted.Load();
-    Check(!loaded.config.world_space_yaw && !loaded.config.rotation_enabled && loaded.config.position_enabled,
+    const cfg::ConfigLoadResult<Config> loaded = cfg::ConfigOwner<Config>(Options(folder, defaults)).Load();
+    Check(loaded.status == cfg::ConfigLoadStatus::Canonical && !loaded.config.world_space_yaw &&
+              !loaded.config.rotation_enabled && loaded.config.position_enabled,
           "the saved toggles come back at the next load");
 }
 
@@ -241,7 +246,6 @@ int main(int argc, char** argv) {
         const std::string committed = ReadBytes(METROEX_COMMITTED_CONFIG);
         Scratch scratch;
         RenderTest(committed);
-        SeedTest(committed);
         CreatedIsTheCommittedFile(scratch, committed);
         SaveTests(scratch, committed);
         FieldOfViewReadsZeroOrSixtyToOneTwenty();

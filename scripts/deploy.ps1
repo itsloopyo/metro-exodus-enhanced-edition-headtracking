@@ -2,8 +2,8 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Deploy the freshly built Release ASI + MetroExodusHeadTracking.ini into the
-    local game install. Usage: pixi run install [<game path>]
+    Deploy the freshly built Release ASI into the local game install. Usage:
+    pixi run install [<game path>]
 .DESCRIPTION
     Convenience for iteration; bypasses install.cmd's loader-check flow, so the
     ASI loader proxy has to be in place already (run install.cmd once).
@@ -49,21 +49,11 @@ if (-not ($loaderNames | Where-Object { Test-Path (Join-Path $GamePath $_) })) {
 }
 
 $asi = Join-Path $projectDir 'bin/Release/MetroExodusHeadTracking.asi'
-$ini = Join-Path $projectDir 'MetroExodusHeadTracking.ini'
-foreach ($f in @($asi, $ini)) {
-    if (-not (Test-Path $f)) { throw "Build artifact missing: $f. Run 'pixi run build' first." }
-}
+if (-not (Test-Path $asi)) { throw "Build artifact missing: $asi. Run 'pixi run build' first." }
 
 Write-Host "Deploying to: $GamePath" -ForegroundColor Cyan
 Copy-Item $asi -Destination $GamePath -Force
 Write-Host '  MetroExodusHeadTracking.asi' -ForegroundColor Green
 
-# Seeded, never overwritten: an update must not reset whatever the user tuned.
-# install.cmd draws the same line with MOD_SEED_FILES.
-$iniTarget = Join-Path $GamePath 'MetroExodusHeadTracking.ini'
-if (Test-Path $iniTarget) {
-    Write-Host '  MetroExodusHeadTracking.ini (kept, already present)' -ForegroundColor DarkGray
-} else {
-    Copy-Item $ini -Destination $iniTarget -Force
-    Write-Host '  MetroExodusHeadTracking.ini' -ForegroundColor Green
-}
+# No config. The mod creates CameraUnlock.ini on its first start, importing a
+# MetroExodusHeadTracking.ini an older build left, and never writes that file.

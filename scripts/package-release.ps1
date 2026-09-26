@@ -32,11 +32,6 @@ if (-not (Test-Path $releaseDir)) { New-Item -ItemType Directory -Path $releaseD
 $asiPath = Join-Path $projectDir "bin/Release/MetroExodusHeadTracking.asi"
 if (-not (Test-Path $asiPath)) { throw "MetroExodusHeadTracking.asi not found at: $asiPath" }
 
-# The mod loads its INI by name from beside MetroExodus.exe (kConfigFileName in src/config.h), so the
-# shipped artifact must be named MetroExodusHeadTracking.ini or nothing reads it.
-$iniPath = Join-Path $projectDir "MetroExodusHeadTracking.ini"
-if (-not (Test-Path $iniPath)) { throw "MetroExodusHeadTracking.ini not found at: $iniPath" }
-
 $vendorAsiDir = Join-Path $projectDir "vendor/ultimate-asi-loader"
 $vendorAsiDll = Join-Path $vendorAsiDir "dinput8.dll"
 if (-not (Test-Path $vendorAsiDll)) { throw "Bundled ASI loader missing: $vendorAsiDll (run 'pixi run update-deps')" }
@@ -70,8 +65,10 @@ $pluginsDir = Join-Path $ghStagingDir "plugins"
 New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
 Copy-Item $asiPath -Destination $pluginsDir -Force
 Write-Host "  plugins/MetroExodusHeadTracking.asi" -ForegroundColor Green
-Copy-Item $iniPath -Destination $pluginsDir -Force
-Write-Host "  plugins/MetroExodusHeadTracking.ini" -ForegroundColor Green
+# No config in either ZIP or the manifest. The mod creates CameraUnlock.ini beside
+# MetroExodus.exe on its first start, importing MetroExodusHeadTracking.ini when an
+# older build left one there, and a shipped copy would either overwrite the player's
+# settings or be written before the mod starts and stop that import.
 
 $ghVendorDir = Join-Path $ghStagingDir "vendor/ultimate-asi-loader"
 New-Item -ItemType Directory -Path $ghVendorDir -Force | Out-Null
@@ -98,14 +95,6 @@ $stagedManifest = Join-Path $ghStagingDir "launcher-manifest.json"
 $manifestText = Get-Content $modManifestPath -Raw
 $manifestText = $manifestText -replace '("version":\s*")\d+\.\d+\.\d+(")', "`${1}$version`$2"
 
-# The launcher writes the default INI from the manifest's own base64 rather than
-# from the copy in plugins/, so the two have to agree. Restamped from the repo's
-# MetroExodusHeadTracking.ini for the same reason the version is: an edit to the
-# INI would otherwise ship a launcher install carrying the previous release's
-# defaults, and nothing in the ZIP would look wrong.
-$iniB64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($iniPath))
-$manifestText = $manifestText -replace '("content_b64":\s*")[A-Za-z0-9+/=]*(")', "`${1}$iniB64`$2"
-
 # The stamp is a substitution, so it does nothing at all when the manifest's own
 # version is absent, empty or not X.Y.Z - and a manifest that quietly kept the
 # wrong version is the one thing this step exists to prevent, because the
@@ -115,10 +104,6 @@ $stampedManifestObject = $manifestText | ConvertFrom-Json
 $stampedVersion = $stampedManifestObject.mod_info.version
 if ($stampedVersion -ne $version) {
     throw "launcher-manifest.json still declares mod_info.version '$stampedVersion' after stamping $version. Set it to a X.Y.Z version and re-run."
-}
-$seededIni = @($stampedManifestObject.loader.seed | Where-Object { $_.target -eq "MetroExodusHeadTracking.ini" })
-if ($seededIni.Count -ne 1 -or $seededIni[0].content_b64 -ne $iniB64) {
-    throw "launcher-manifest.json's loader.seed does not carry the current MetroExodusHeadTracking.ini after stamping. It needs exactly one seed entry targeting MetroExodusHeadTracking.ini with a content_b64 value."
 }
 
 [System.IO.File]::WriteAllText($stagedManifest, $manifestText, (New-Object System.Text.UTF8Encoding $false))
@@ -163,9 +148,10 @@ New-Item -ItemType Directory -Path $nexusStagingDir -Force | Out-Null
 
 Copy-Item $asiPath -Destination $nexusStagingDir -Force
 Write-Host "  MetroExodusHeadTracking.asi" -ForegroundColor Green
-# No MetroExodusHeadTracking.ini. This archive extracts over the game folder, so a
-# config in it would put the default file over the player's own, and an older file
-# would never be converted. The mod writes the file on its first start.
+# Neither CameraUnlock.ini nor MetroExodusHeadTracking.ini. This archive extracts
+# over the game folder, so the first would put the defaults over the player's
+# settings and stop an older file being imported, and the second would replace the
+# file an older build reads. The mod creates CameraUnlock.ini on its first start.
 
 # The loader ships here even though a Nexus ZIP normally carries payload only.
 # A BepInEx mod can leave the loader out because the user installed BepInEx as

@@ -4,6 +4,8 @@
 
 An unofficial head tracking mod for Metro Exodus Enhanced Edition that moves the view with your head while your mouse or controller keeps aiming, driven by a webcam, phone, or any OpenTrack compatible tracker, with no VR headset required.
 
+Settings are now kept in `CameraUnlock.ini` beside `MetroExodus.exe`. Earlier versions of the mod read `MetroExodusHeadTracking.ini`: the first start of this version reads your settings from it into `CameraUnlock.ini` and leaves it as it was. See [Configuration](#configuration).
+
 ## Features
 
 - **Decoupled look and aim** - head tracking moves the view; your shots still go where the mouse or controller points.
@@ -48,7 +50,7 @@ The folder to point at is the one holding `MetroExodus.exe`.
 
 ### Manual Installation
 
-Placing the files by hand takes three copies into the folder holding
+Placing the files by hand takes two copies into the folder holding
 `MetroExodus.exe`:
 
 1. `vendor\ultimate-asi-loader\dinput8.dll` from the installer ZIP, renamed to
@@ -57,13 +59,12 @@ Placing the files by hand takes three copies into the folder holding
    nothing else you would use for this. `winmm.dll` is what the installer picks;
    leaving the file as `dinput8.dll` works too.
 2. `plugins\MetroExodusHeadTracking.asi`.
-3. `plugins\MetroExodusHeadTracking.ini`, only if you do not already have one.
-   The installer never overwrites an existing config and neither should you.
-   Leaving it out is fine too: the mod writes the file on its first start.
 
-The Nexus ZIP is laid out the same way, without the config: extract it straight
-into the folder holding `MetroExodus.exe` and the files land where they belong,
-and the mod writes `MetroExodusHeadTracking.ini` on its first start.
+No config file ships. The mod creates `CameraUnlock.ini` on its first start,
+from your `MetroExodusHeadTracking.ini` when an earlier version left one there.
+
+The Nexus ZIP is laid out the same way: extract it straight into the folder
+holding `MetroExodus.exe` and the files land where they belong.
 
 ## Setting Up OpenTrack
 
@@ -141,9 +142,9 @@ rotation only, then position only, then back to rotation and position.
    pitches turning your head leans the view instead. Some players prefer it for
    climbing and vehicle sections.
 
-The tracking mode and the yaw mode are saved to the config the moment you
-change them (`RotationEnabled`, `PositionEnabled` and `WorldSpaceYaw`), so the
-next launch starts where you left them. `End` / `Ctrl+Shift+Y` changes the
+The tracking mode and the yaw mode are saved to `CameraUnlock.ini` the moment
+you change them (`RotationEnabled`, `PositionEnabled` and `WorldSpaceYaw`), so
+the next launch starts where you left them. `End` / `Ctrl+Shift+Y` changes the
 current session only; whether tracking is on at launch is `EnableOnStartup`.
 
 ### Aiming down sights
@@ -180,9 +181,17 @@ Two things follow from that, and both are worth knowing before you play:
 ## Configuration
 
 <!-- cameraunlock:config -->
-The mod reads its settings from `MetroExodusHeadTracking.ini` in the game folder, and creates the file when it starts and finds none. Edit it with any text editor.
+The mod reads its settings from `CameraUnlock.ini` in the game folder, and creates the file when it starts and finds none. Edit it with any text editor.
 
-Earlier versions of the mod used an older layout for this file. The first time this version starts, it converts the file once into the layout below and keeps the file as it was beside it as `MetroExodusHeadTracking.ini.pre-canonical`. `MetroExodusHeadTracking.ini.pre-canonical.last`, when present, is the file as it was before the most recent conversion: the mod converts the file again when it finds the older layout later, for example after an older version of the mod rewrote it.
+A setting set to `default` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it, and neither do earlier versions of this mod. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
+
+`Defaults.ini` is `%AppData%\CameraUnlock\Defaults.ini` on Windows; `$XDG_CONFIG_HOME/CameraUnlock/Defaults.ini` on Linux, or `~/.config/CameraUnlock/Defaults.ini` where `XDG_CONFIG_HOME` is not set, under Wine and Proton too; and `~/Library/Application Support/CameraUnlock/Defaults.ini` on macOS. The mod's log, where it writes one, names the file it read.
+
+When the mod starts and finds no `Defaults.ini`, it creates one holding the built-in values, unless Windows runs the game as a packaged app. The mod never changes `Defaults.ini` after that. Edit it with any text editor.
+
+Earlier versions of the mod kept these settings in `MetroExodusHeadTracking.ini`, in the same folder. The first time this version starts and finds no `CameraUnlock.ini`, it reads your settings from `MetroExodusHeadTracking.ini` and writes them into `CameraUnlock.ini`. It never changes `MetroExodusHeadTracking.ini`, and does not read it again while `CameraUnlock.ini` exists.
+
+A setting that the defaults below set to `default` is written as `default` when the value imported for it equals its default at that start, which is the value `Defaults.ini` gives it, or the built-in value where `Defaults.ini` gives none. It then follows `Defaults.ini`. Every other setting is written with the value imported for it. `RotationEnabled` and `PositionEnabled` are one setting here, the tracking mode, so both are written as `default` or neither is.
 
 Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
 
@@ -190,7 +199,29 @@ Comments, and keys the mod never read, are not carried over. Nor are these, wher
 - A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
 - The setting for a feature that earlier versions shipped switched off while it was untested. It now follows the mod's default.
 
-An older version of the mod may not read the new layout correctly. It reads a key that moved as its own default, and it can misread a hotkey or another value that is now written as a name. To go back to an older version, first copy `MetroExodusHeadTracking.ini.pre-canonical` back over `MetroExodusHeadTracking.ini`, which restores the old file.
+An older version of the mod reads `MetroExodusHeadTracking.ini` and never reads `CameraUnlock.ini`, so a setting you change after updating is not in `MetroExodusHeadTracking.ini`.
+
+Deleting only `CameraUnlock.ini` makes the next start read `MetroExodusHeadTracking.ini` again. To go back to the defaults, replace everything in `CameraUnlock.ini` with the defaults below. Every setting they set to `default` then follows `Defaults.ini`.
+
+The built-in value of each setting set to `default` below:
+
+- `UdpPort=4242`
+- `EnableOnStartup=true`
+- `WorldSpaceYaw=true`
+- `RotationEnabled=true`
+- `LocalSmoothing=0.0`
+- `RemoteSmoothing=0.15`
+- `PositionEnabled=true`
+- `PositionLimitX=0.3`
+- `PositionLimitY=0.2`
+- `PositionLimitYDown=0.2`
+- `PositionLimitZ=0.4`
+- `PositionLimitZBack=0.1`
+- `ToggleKey=End, Ctrl+Shift+Y`
+- `CycleTrackingModeKey=PageUp, Ctrl+Shift+G`
+- `YawModeKey=PageDown, Ctrl+Shift+H`
+- `LightFollowsHead=true`
+- `LightMultiplier=1.5`
 
 With every setting at its default, the file reads:
 
@@ -198,6 +229,12 @@ With every setting at its default, the file reads:
 ; Metro Exodus Enhanced Edition head tracking settings.
 ; Comments start with ; and go on their own line. Text after a value is part of the value.
 ; Hotkeys are key names such as End, PageUp or Ctrl+Shift+Y. Separate several with commas; leave empty for none.
+; A setting set to default takes its value from Defaults.ini, which every head tracking mod
+; that keeps its settings in CameraUnlock.ini reads: %AppData%\CameraUnlock\Defaults.ini on
+; Windows, $XDG_CONFIG_HOME/CameraUnlock/Defaults.ini (normally ~/.config/CameraUnlock) on
+; Linux, under Wine and Proton too, and ~/Library/Application Support/CameraUnlock/Defaults.ini
+; on macOS. The log names the file it read. Write a value instead of default to change that
+; setting for this game only.
 
 [CameraUnlock]
 ; Written by the mod. Leave this section in place.
@@ -205,53 +242,53 @@ ConfigFormat=1
 
 [Network]
 ; UDP port the mod receives tracker data on (OpenTrack protocol).
-UdpPort=4242
+UdpPort=default
 
 [General]
 ; true: head tracking is on when the game starts. ToggleKey turns it on and off.
-EnableOnStartup=true
+EnableOnStartup=default
 ; true: yaw turns around the world's up axis. false: around the camera's own up axis.
-WorldSpaceYaw=true
+WorldSpaceYaw=default
 ; true: turning your head turns the view.
 ; Tracking mode at startup, with PositionEnabled. The mode hotkey changes both.
-RotationEnabled=true
+RotationEnabled=default
 
 [Smoothing]
 ; Smoothing when the tracker runs on this PC. 0 is the least, 1 the most.
-LocalSmoothing=0.0
+LocalSmoothing=default
 ; Smoothing when the tracker is another device on the network, such as a phone.
 ; 0 is the least, 1 the most.
-RemoteSmoothing=0.15
+RemoteSmoothing=default
 
 [Position]
 ; true: moving your head moves the view.
 ; Tracking mode at startup, with RotationEnabled. The mode hotkey changes both.
-PositionEnabled=true
+PositionEnabled=default
 ; How far, in metres, leaning left or right can move the view.
-PositionLimitX=0.3
+PositionLimitX=default
 ; How far, in metres, raising your head can move the view.
-PositionLimitY=0.2
+PositionLimitY=default
 ; How far, in metres, lowering your head can move the view.
-PositionLimitYDown=0.2
+PositionLimitYDown=default
 ; How far, in metres, leaning forward can move the view.
-PositionLimitZ=0.4
+PositionLimitZ=default
 ; How far, in metres, leaning back can move the view.
-PositionLimitZBack=0.1
+PositionLimitZBack=default
 
 [Hotkeys]
 ; Turns head tracking on and off.
-ToggleKey=End, Ctrl+Shift+Y
+ToggleKey=default
 ; Changes the tracking mode: rotation and position, rotation only, position only.
-CycleTrackingModeKey=PageUp, Ctrl+Shift+G
+CycleTrackingModeKey=default
 ; Switches yaw between the world's up axis and the camera's own (WorldSpaceYaw).
-YawModeKey=PageDown, Ctrl+Shift+H
+YawModeKey=default
 
 [Light]
 ; true: a light you carry points where you look instead of where you aim.
-LightFollowsHead=true
+LightFollowsHead=default
 ; How far the light turns for each degree your head turns.
 ; 1 matches the view, 0 keeps the light on your aim.
-LightMultiplier=1.5
+LightMultiplier=default
 
 [Camera]
 ; Field of view in degrees, the number the game's own Field of View slider sets.
@@ -289,12 +326,12 @@ Changed from earlier versions:
   sights whatever it held.
 - `[Hotkeys] AdsMode` and `ChordAdsMode` are no longer read, and neither
   `Insert` nor `Ctrl+Shift+U` cycles an ADS mode any more.
-- A value the mod cannot use no longer stops it loading: the line is named in
-  `HeadTracking.log` and the setting keeps its default. That covers a
-  `FieldOfView` that is neither 0 nor 60 to 120, and `UdpPort` now takes 1 to
-  65535. An old file that the previous version refused for its port or its
-  field of view is left as it is, and the mod still does not start until you fix
-  that value.
+- A value the mod cannot use in `CameraUnlock.ini` no longer stops it loading:
+  the line is named in `HeadTracking.log` and the setting keeps its default.
+  That covers a `FieldOfView` that is neither 0 nor 60 to 120, and `UdpPort` now
+  takes 1 to 65535. A `MetroExodusHeadTracking.ini` that the previous version
+  refused for its port or its field of view is not imported, and the mod does
+  not start until you fix that value in it.
 
 Four things to know about `FieldOfView`:
 
@@ -338,12 +375,15 @@ the `.prev` one.
   folder holding `MetroExodus.exe`.
 - If `HeadTracking.log` is absent, the loader never engaged. Re-run
   `install.cmd` and let it pick the folder.
-- If the log says the file could not be loaded because of its `Port` or
-  `FieldOfView`, it is a file from an earlier version that that version also
-  refused, and head tracking does not start until the line is fixed. `Port`
-  takes 1024 to 65535 and `FieldOfView` takes 0 or 60 to 120. Fix the line, or
-  delete the INI to get a clean default set back. In the new layout a value the
-  mod cannot use is named in the log and the setting keeps its default.
+- If the log says `MetroExodusHeadTracking.ini` could not be imported because of
+  its `Port` or `FieldOfView`, it is a file from an earlier version that that
+  version also refused, and head tracking does not start until the line is
+  fixed. `Port` takes 1024 to 65535 and `FieldOfView` takes 0 or 60 to 120. Fix
+  the line and the next start imports the file. To start on the defaults
+  instead, save the file shown at the end of [Configuration](#configuration) as
+  `CameraUnlock.ini`; the old file is then not read. In `CameraUnlock.ini` a
+  value the mod cannot use is named in the log and the setting keeps its
+  default.
 - If the log says no build profile matched, the game has been patched since this
   release. The mod stays dormant and the game runs stock; check the Releases page
   for an update.
@@ -367,9 +407,11 @@ the `.prev` one.
 
 - Confirm the tracker is running and its output is UDP to `127.0.0.1`, port
   `4242`.
-- Check `UdpPort` in the INI matches the port the tracker sends to.
+- Check `UdpPort` in `CameraUnlock.ini` matches the port the tracker sends to.
+  Where it says `default`, the port is the one in `Defaults.ini`.
 - Press `End` or `Ctrl+Shift+Y` in case tracking is toggled off, and check
-  `EnableOnStartup` in the INI.
+  `EnableOnStartup` in `CameraUnlock.ini`, or in `Defaults.ini` where it says
+  `default`.
 - The log records whether packets are arriving, which separates a tracker
   problem from a mod problem.
 
@@ -402,14 +444,15 @@ the `.prev` one.
 
 ## Updating
 
-Download the new release and run `install.cmd` again. Your config is preserved.
+Download the new release and run `install.cmd` again. Your settings are kept:
+the installer writes no config file.
 
 ## Uninstalling
 
 Run `uninstall.cmd`. This removes the mod's `.asi` and its logs, and leaves
-`MetroExodusHeadTracking.ini` (and any `.pre-canonical` copies of it) in place so
-a reinstall starts on your settings. Delete those by hand to remove the settings
-too. The Ultimate ASI Loader is only removed if the installer put it there; use
+`CameraUnlock.ini`, and the `MetroExodusHeadTracking.ini` earlier versions read,
+in place so a reinstall starts on your settings. Delete `CameraUnlock.ini` by
+hand to remove the settings too. `Defaults.ini` is not touched. The Ultimate ASI Loader is only removed if the installer put it there; use
 `uninstall.cmd /force` to remove it anyway.
 
 ## Building from Source
