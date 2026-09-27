@@ -64,6 +64,8 @@ try {
 
 $tag = "v$newVersion"
 
+Assert-ReleaseNotBelowCanonicalSince -RepoRoot $ProjectRoot -Version $newVersion
+
 $branch = (git -C $ProjectRoot rev-parse --abbrev-ref HEAD).Trim()
 if ($branch -ne 'main') {
     Write-Host "Refusing to release: on branch '$branch', not 'main'."
