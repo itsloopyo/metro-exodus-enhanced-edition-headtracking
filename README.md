@@ -4,8 +4,6 @@
 
 An unofficial head tracking mod for Metro Exodus Enhanced Edition that moves the view with your head while your mouse or controller keeps aiming, driven by a webcam, phone, or any OpenTrack compatible tracker, with no VR headset required.
 
-Settings are now kept in `CameraUnlock.ini` beside `MetroExodus.exe`. Earlier versions of the mod read `MetroExodusHeadTracking.ini`: the first start of this version reads your settings from it into `CameraUnlock.ini` and leaves it as it was. See [Configuration](#configuration).
-
 ## Features
 
 - **Decoupled look and aim** - head tracking moves the view; your shots still go where the mouse or controller points.
@@ -60,8 +58,7 @@ Placing the files by hand takes two copies into the folder holding
    leaving the file as `dinput8.dll` works too.
 2. `plugins\MetroExodusHeadTracking.asi`.
 
-No config file ships. The mod creates `CameraUnlock.ini` on its first start,
-from your `MetroExodusHeadTracking.ini` when an earlier version left one there.
+No config file ships. The mod creates `CameraUnlock.ini` on its first start.
 
 The Nexus ZIP is laid out the same way: extract it straight into the folder
 holding `MetroExodus.exe` and the files land where they belong.
@@ -308,31 +305,6 @@ Discovery=false
 The mod reads the file when the game starts, so an edit takes effect at the next
 launch.
 
-Changed from earlier versions:
-
-- `[Sensitivity]` (`Yaw`, `Pitch`, `Roll`, `InvertYaw`, `InvertPitch`,
-  `InvertRoll`) and `[Position] SensitivityX`, `SensitivityY` and `SensitivityZ`
-  are gone. Every one of them shipped at 1 or false, so the default view is
-  unchanged; a value you changed is dropped and named in `HeadTracking.log`.
-- `[General] Port` is `[Network] UdpPort`, `[Position] Enabled` is the
-  `RotationEnabled` / `PositionEnabled` pair, and the limits are
-  `PositionLimitX`, `PositionLimitY`, `PositionLimitYDown`, `PositionLimitZ` and
-  `PositionLimitZBack`.
-- `[Hotkeys] Toggle`, `CycleMode` and `YawMode` (virtual-key codes) and the
-  `ChordToggle`, `ChordCycleMode` and `ChordYawMode` switches are one key list
-  per action: `ToggleKey`, `CycleTrackingModeKey` and `YawModeKey`. A chord you
-  had switched off is left out of its list.
-- `[View] AdsMode` is no longer read. Head tracking carries on through the
-  sights whatever it held.
-- `[Hotkeys] AdsMode` and `ChordAdsMode` are no longer read, and neither
-  `Insert` nor `Ctrl+Shift+U` cycles an ADS mode any more.
-- A value the mod cannot use in `CameraUnlock.ini` no longer stops it loading:
-  the line is named in `HeadTracking.log` and the setting keeps its default.
-  That covers a `FieldOfView` that is neither 0 nor 60 to 120, and `UdpPort` now
-  takes 1 to 65535. A `MetroExodusHeadTracking.ini` that the previous version
-  refused for its port or its field of view is not imported, and the mod does
-  not start until you fix that value in it.
-
 Four things to know about `FieldOfView`:
 
 - **The game's own slider does not move the picture in a level on this build.**
@@ -375,15 +347,6 @@ the `.prev` one.
   folder holding `MetroExodus.exe`.
 - If `HeadTracking.log` is absent, the loader never engaged. Re-run
   `install.cmd` and let it pick the folder.
-- If the log says `MetroExodusHeadTracking.ini` could not be imported because of
-  its `Port` or `FieldOfView`, it is a file from an earlier version that that
-  version also refused, and head tracking does not start until the line is
-  fixed. `Port` takes 1024 to 65535 and `FieldOfView` takes 0 or 60 to 120. Fix
-  the line and the next start imports the file. To start on the defaults
-  instead, save the file shown at the end of [Configuration](#configuration) as
-  `CameraUnlock.ini`; the old file is then not read. In `CameraUnlock.ini` a
-  value the mod cannot use is named in the log and the setting keeps its
-  default.
 - If the log says no build profile matched, the game has been patched since this
   release. The mod stays dormant and the game runs stock; check the Releases page
   for an update.
@@ -450,10 +413,10 @@ the installer writes no config file.
 ## Uninstalling
 
 Run `uninstall.cmd`. This removes the mod's `.asi` and its logs, and leaves
-`CameraUnlock.ini`, and the `MetroExodusHeadTracking.ini` earlier versions read,
-in place so a reinstall starts on your settings. Delete `CameraUnlock.ini` by
-hand to remove the settings too. `Defaults.ini` is not touched. The Ultimate ASI Loader is only removed if the installer put it there; use
-`uninstall.cmd /force` to remove it anyway.
+`CameraUnlock.ini` in place so a reinstall starts on your settings. Delete
+`CameraUnlock.ini` by hand to remove the settings too. `Defaults.ini` is not
+touched. The Ultimate ASI Loader is only removed if the installer put it there;
+use `uninstall.cmd /force` to remove it anyway.
 
 ## Building from Source
 
