@@ -5,7 +5,6 @@
 ### Changed
 
 - Settings move to `CameraUnlock.ini` in the game folder, beside `MetroExodus.exe`. Earlier versions of the mod kept these settings in `MetroExodusHeadTracking.ini`, in the same folder. The first time this version starts and finds no `CameraUnlock.ini`, it reads your settings from `MetroExodusHeadTracking.ini` and writes them into `CameraUnlock.ini`. It never changes `MetroExodusHeadTracking.ini`, and does not read it again while `CameraUnlock.ini` exists.
-- A setting that the defaults the README shows set to `default` is written as `default` when the value imported for it equals its default at that start, which is the value `Defaults.ini` gives it, or the built-in value where `Defaults.ini` gives none. It then follows `Defaults.ini`. Every other setting is written with the value imported for it.
 - `RotationEnabled` and `PositionEnabled` are one setting here, the tracking mode, so both are written as `default` or neither is.
 - Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
   - A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
@@ -19,6 +18,7 @@
 - Uninstalling keeps `CameraUnlock.ini` and `MetroExodusHeadTracking.ini`, so a reinstall starts on your settings.
 - Head tracking carries on through the sights whatever `[View] AdsMode` held, and that key is no longer read (9554397).
 - `[Hotkeys] AdsMode` and `ChordAdsMode` are no longer read, and neither Insert nor Ctrl+Shift+U cycles an ADS mode any more (9554397).
+- A setting that the defaults the README shows set to `default` is written as `default` when you never changed it from the default earlier versions used, because `MetroExodusHeadTracking.ini` does not hold it or holds that default. It then follows `Defaults.ini`, so it takes the value `Defaults.ini` gives it, or the built-in value where `Defaults.ini` gives none, which can differ from the default earlier versions used. A setting you changed is written with the value imported for it, or as `default` where that value equals its default at that start.
 
 ### Added
 
