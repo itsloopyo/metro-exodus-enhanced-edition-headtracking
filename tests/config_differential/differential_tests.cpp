@@ -16,9 +16,10 @@
 // the import must list as pose shaping and drop (approved change pose_shaping). No default
 // moved, so the no-file input has no difference either. Each input migrates three times: with
 // Defaults.ini at the built-in values, from a read-only legacy file, and over a Defaults.ini
-// that differs from the built-in values on every global row. All three must start the game the
-// same way, since the migration writes default only where the imported value is what default
-// gives at that start.
+// that differs from the built-in values on every global row. The first two must start the game
+// as the import does. Over the skewed Defaults.ini, a row the player never changed from the dev
+// build's shipped value follows Defaults.ini and every other row keeps the imported value, and
+// the import must name exactly the untouched rows in follows_defaults_ini.
 //
 // After every load the legacy file keeps its bytes, last write time and attributes, and the
 // folder holds it and CameraUnlock.ini and nothing else (the legacy file alone after a refused
@@ -568,6 +569,86 @@ std::vector<std::string> StartupDifferences(const Startup& a, const Startup& b) 
     return out;
 }
 
+// `player` with every row in `follows` taken from `global`, the start a migration over a
+// Defaults.ini gives when the import leaves those rows to it.
+Startup Follow(const Startup& player, const Startup& global, const std::vector<cfg::schema::Concept>& follows) {
+    using C = cfg::schema::Concept;
+    Startup s = player;
+    const auto takeKeys = [&](Action action) {
+        s.hotkeys.erase(std::remove_if(s.hotkeys.begin(), s.hotkeys.end(),
+                                       [&](const Registration& r) { return r.action == action; }),
+                        s.hotkeys.end());
+        for (const Registration& r : global.hotkeys) {
+            if (r.action == action) s.hotkeys.push_back(r);
+        }
+        std::sort(s.hotkeys.begin(), s.hotkeys.end());
+    };
+    for (const C id : follows) {
+        switch (id) {
+            case C::UdpPort: s.port = global.port; break;
+            case C::EnableOnStartup: s.enabled = global.enabled; break;
+            case C::WorldSpaceYaw: s.world_yaw = global.world_yaw; break;
+            case C::RotationEnabled:
+            case C::PositionEnabled: s.mode = global.mode; break;
+            case C::LocalSmoothing: s.local_smoothing = global.local_smoothing; break;
+            case C::RemoteSmoothing: s.remote_smoothing = global.remote_smoothing; break;
+            case C::PositionLimitX: s.limit_x = global.limit_x; break;
+            case C::PositionLimitY: s.limit_y = global.limit_y; break;
+            case C::PositionLimitYDown: s.limit_y_down = global.limit_y_down; break;
+            case C::PositionLimitZ: s.limit_z = global.limit_z; break;
+            case C::PositionLimitZBack: s.limit_z_back = global.limit_z_back; break;
+            case C::ToggleKey: takeKeys(Action::Toggle); break;
+            case C::CycleTrackingModeKey: takeKeys(Action::CycleMode); break;
+            case C::YawModeKey: takeKeys(Action::YawMode); break;
+            case C::LightFollowsHead: s.light_follows_head = global.light_follows_head; break;
+            case C::LightMultiplier: s.light_multiplier = global.light_multiplier; break;
+            default: throw std::logic_error("follows_defaults_ini names a concept the table does not bind");
+        }
+    }
+    return s;
+}
+
+std::vector<Registration> KeysOf(const std::vector<Registration>& regs, Action action) {
+    std::vector<Registration> out;
+    for (const Registration& r : regs) {
+        if (r.action == action) out.push_back(r);
+    }
+    return out;
+}
+
+// The rows a player never changed: each one's start under the frozen reader is the start the dev
+// build's shipped file gives. Worked out from the startup state, not from the import's own
+// comparisons, so a row the import leaves out or adds shows here.
+std::set<cfg::schema::Concept> UntouchedRows(const legacy::Config& c) {
+    using C = cfg::schema::Concept;
+    const Startup a = FromImport(c);
+    const Startup b = FromImport(legacy::Config{});
+    std::set<C> out;
+    const auto row = [&](C id, bool same) {
+        if (same) out.insert(id);
+    };
+    row(C::UdpPort, a.port == b.port);
+    row(C::EnableOnStartup, a.enabled == b.enabled);
+    row(C::WorldSpaceYaw, a.world_yaw == b.world_yaw);
+    row(C::RotationEnabled, a.mode == b.mode);
+    row(C::PositionEnabled, a.mode == b.mode);
+    row(C::LocalSmoothing, a.local_smoothing == b.local_smoothing);
+    row(C::RemoteSmoothing, a.remote_smoothing == b.remote_smoothing);
+    row(C::PositionLimitX, a.limit_x == b.limit_x);
+    row(C::PositionLimitY, a.limit_y == b.limit_y);
+    row(C::PositionLimitYDown, a.limit_y_down == b.limit_y_down);
+    row(C::PositionLimitZ, a.limit_z == b.limit_z);
+    row(C::PositionLimitZBack, a.limit_z_back == b.limit_z_back);
+    row(C::ToggleKey, KeysOf(a.hotkeys, Action::Toggle) == KeysOf(b.hotkeys, Action::Toggle));
+    row(C::CycleTrackingModeKey, KeysOf(a.hotkeys, Action::CycleMode) == KeysOf(b.hotkeys, Action::CycleMode));
+    row(C::YawModeKey, KeysOf(a.hotkeys, Action::YawMode) == KeysOf(b.hotkeys, Action::YawMode));
+    row(C::LightFollowsHead, a.light_follows_head == b.light_follows_head);
+    row(C::LightMultiplier, a.light_multiplier == b.light_multiplier);
+    return out;
+}
+
+constexpr size_t kGlobalRows = 17;
+
 // The only difference comparison 2 allows: every sensitivity and inversion the frozen reader
 // read is listed, folded where it holds the shipped identity value, and dropped as PoseShaping
 // where it does not. Nothing else is dropped.
@@ -615,6 +696,7 @@ struct MigrationTally {
     int converted = 0;
     int refused = 0;
     int with_pose_shaping_dropped = 0;
+    int with_changed_rows = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -632,6 +714,8 @@ struct Folders {
     // contents the test holds to the legacy file and CameraUnlock.ini.
     std::wstring defaults;
     std::wstring skewed_defaults;
+    // The start with no legacy file over the skewed Defaults.ini: every global row its value.
+    Startup skewed_global;
 };
 
 const wchar_t kLegacyName[] = L"MetroExodusHeadTracking.ini";
@@ -659,7 +743,7 @@ cfg::ConfigOwnerOptions<Config> Options(const std::wstring& folder, const std::w
 // the startup state it gives, or nothing for a refused file.
 std::optional<Startup> MigrateInput(const std::wstring& folder, const std::wstring& defaults, const std::string& name,
                                     const std::optional<std::string>& bytes, const ImportRun& i,
-                                    const cfg::ImportResult* result, MigrationTally& tally) {
+                                    const cfg::ImportResult* result, const Startup& expected, MigrationTally& tally) {
     using cfg::ConfigLoadStatus;
     const std::wstring legacy = folder + L"\\" + kLegacyName;
     const std::wstring path = folder + L"\\" + kConfigName;
@@ -695,7 +779,7 @@ std::optional<Startup> MigrateInput(const std::wstring& folder, const std::wstri
     if (!cfg::HasCanonicalStamp(migrated)) Fail(name, "CameraUnlock.ini carries no stamp");
     if (!loaded.diagnostics.empty()) Fail(name, "CameraUnlock.ini reads with a diagnostic");
     const Startup started = FromMigration(loaded.config);
-    for (const std::string& d : StartupDifferences(FromImport(i.cfg), started)) {
+    for (const std::string& d : StartupDifferences(expected, started)) {
         Fail(name, "comparison 2: " + d);
     }
     tally.migrated.insert(migrated);
@@ -750,10 +834,21 @@ void RunInput(const Folders& f, const std::string& name, const std::optional<std
 
     CompareOracleWithImport(name, o, i);
 
+    // Exactly the rows the player never changed follow Defaults.ini, the mode pair as one.
+    if (result && ImportUsable(i.status)) {
+        const std::set<cfg::schema::Concept> named(result->follows_defaults_ini.begin(),
+                                                   result->follows_defaults_ini.end());
+        if (named.size() != result->follows_defaults_ini.size()) Fail(name, "follows_defaults_ini names a row twice");
+        if (named != UntouchedRows(i.cfg)) Fail(name, "follows_defaults_ini is not the rows the player never changed");
+        if (named.size() != kGlobalRows) ++tally.with_changed_rows;
+    }
+
+    const Startup importedStart = FromImport(i.cfg);
     const cfg::ImportResult* imported = result ? &*result : nullptr;
     EmptyFolder(f.migration);
     if (bytes) WriteBytes(f.migration + L"\\" + kLegacyName, *bytes);
-    const std::optional<Startup> writable = MigrateInput(f.migration, f.defaults, name, bytes, i, imported, tally);
+    const std::optional<Startup> writable =
+        MigrateInput(f.migration, f.defaults, name, bytes, i, imported, importedStart, tally);
 
     EmptyFolder(f.read_only);
     if (bytes) {
@@ -762,22 +857,24 @@ void RunInput(const Folders& f, const std::string& name, const std::optional<std
         SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_READONLY);
     }
     const std::optional<Startup> readOnly =
-        MigrateInput(f.read_only, f.defaults, name + " (read-only)", bytes, i, imported, tally);
+        MigrateInput(f.read_only, f.defaults, name + " (read-only)", bytes, i, imported, importedStart, tally);
     if (writable.has_value() != readOnly.has_value() ||
         (writable && !StartupDifferences(*writable, *readOnly).empty())) {
         Fail(name, "a read-only legacy file does not migrate as a writable one does");
     }
 
     // With no legacy file the settings are Defaults.ini's own, so only an input with a file is
-    // held to the import there.
+    // held to the import there: the rows the player never changed take the skewed Defaults.ini's
+    // values, and every other row keeps the player's.
     if (bytes) {
         EmptyFolder(f.skewed);
         WriteBytes(f.skewed + L"\\" + kLegacyName, *bytes);
-        const std::optional<Startup> skewed =
-            MigrateInput(f.skewed, f.skewed_defaults, name + " (skewed Defaults.ini)", bytes, i, imported, tally);
-        if (writable.has_value() != skewed.has_value() ||
-            (writable && !StartupDifferences(*writable, *skewed).empty())) {
-            Fail(name, "the migration starts differently over a Defaults.ini that differs everywhere");
+        const Startup expected =
+            result ? Follow(importedStart, f.skewed_global, result->follows_defaults_ini) : importedStart;
+        const std::optional<Startup> skewed = MigrateInput(f.skewed, f.skewed_defaults, name + " (skewed Defaults.ini)",
+                                                           bytes, i, imported, expected, tally);
+        if (writable.has_value() != skewed.has_value()) {
+            Fail(name, "the migration is refused over one Defaults.ini and not the other");
         }
     }
 }
@@ -811,11 +908,21 @@ int main() {
         CreateDirectoryW(root.c_str(), nullptr);
         const std::wstring global = MakeFolder(root, L"global");
         const std::wstring skewedGlobal = MakeFolder(root, L"skewed-global");
-        const Folders folders{MakeFolder(root, L"oracle"),    MakeFolder(root, L"import"),
+        Folders folders{MakeFolder(root, L"oracle"),    MakeFolder(root, L"import"),
                               MakeFolder(root, L"migration"), MakeFolder(root, L"read-only"),
                               MakeFolder(root, L"skewed"),    global + L"\\Defaults.ini",
                               skewedGlobal + L"\\Defaults.ini"};
         WriteBytes(folders.skewed_defaults, kSkewedDefaults);
+        {
+            EmptyFolder(folders.skewed);
+            const cfg::ConfigLoadResult<Config> fresh =
+                cfg::ConfigOwner<Config>(Options(folders.skewed, folders.skewed_defaults)).Load();
+            if (fresh.status != cfg::ConfigLoadStatus::Created) throw std::logic_error("the skewed first start");
+            folders.skewed_global = FromMigration(fresh.config);
+            const std::vector<std::string> moved = StartupDifferences(FromImport(legacy::Config{}), folders.skewed_global);
+            // Thirteen fields and the hotkey list; the pair is the one mode field.
+            if (moved.size() != 14) Fail("skewed Defaults.ini", "does not differ from the built-in values on every row");
+        }
         MigrationTally tally;
         tally.committed = ReadBytes(Widen(METROEX_COMMITTED_CONFIG));
 
@@ -849,14 +956,21 @@ int main() {
         // on its first run, each as the legacy file, import into the committed file, the file a
         // first start with no legacy file creates. Defaults.ini holds the built-in values, so an
         // untouched row migrates as default.
-        for (const auto& upgrade : {std::make_pair("shipped", shipped), std::make_pair("first run", firstRun)}) {
-            EmptyFolder(folders.migration);
-            WriteBytes(folders.migration + L"\\" + kLegacyName, upgrade.second);
-            const cfg::ConfigLoadResult<Config> loaded =
-                cfg::ConfigOwner<Config>(Options(folders.migration, folders.defaults)).Load();
-            if (loaded.status != cfg::ConfigLoadStatus::Migrated) Fail(upgrade.first, "does not migrate");
-            if (ReadBytes(folders.migration + L"\\" + kConfigName) != tally.committed) {
-                Fail(upgrade.first, "does not import into the committed file");
+        // The same holds over the skewed Defaults.ini, since every row of those files is one the
+        // player never changed and so migrates as default, and it holds for an empty file.
+        for (const auto& upgrade : {std::make_pair("shipped", shipped), std::make_pair("first run", firstRun),
+                                    std::make_pair("empty file", std::string())}) {
+            for (const std::wstring* defaults : {&folders.defaults, &folders.skewed_defaults}) {
+                EmptyFolder(folders.migration);
+                WriteBytes(folders.migration + L"\\" + kLegacyName, upgrade.second);
+                const cfg::ConfigLoadResult<Config> loaded =
+                    cfg::ConfigOwner<Config>(Options(folders.migration, *defaults)).Load();
+                if (loaded.status != cfg::ConfigLoadStatus::Migrated) Fail(upgrade.first, "does not migrate");
+                if (ReadBytes(folders.migration + L"\\" + kConfigName) != tally.committed) {
+                    Fail(upgrade.first, defaults == &folders.defaults
+                                            ? "does not import into the committed file"
+                                            : "does not import into the committed file over the skewed Defaults.ini");
+                }
             }
         }
 
@@ -886,6 +1000,8 @@ int main() {
                     tally.created, tally.converted, tally.with_pose_shaping_dropped, tally.refused,
                     tally.migrated.size());
         if (tally.with_pose_shaping_dropped == 0) Fail("pose shaping", "no input drops a changed value");
+        std::printf("follows Defaults.ini: %d imports keep a row the player changed\n", tally.with_changed_rows);
+        if (tally.with_changed_rows == 0) Fail("follows Defaults.ini", "no input changes a row");
 
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);

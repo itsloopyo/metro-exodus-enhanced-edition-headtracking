@@ -15,17 +15,17 @@ namespace {
 
 namespace cfg = cameraunlock::config;
 using cameraunlock::input::FormatKeyBindings;
-using cameraunlock::input::KeyBinding;
 using cameraunlock::input::KeyModifiers;
 
 constexpr char kFovExpected[] = "0, or an angle from 60 to 120";
 
 // A legacy action's key list: the key the old build bound it to, then the Ctrl+Shift chord
 // the old build registered beside it while its chord switch was on.
-std::string KeyList(int vk, bool chord, char chordLetter) {
-    std::vector<KeyBinding> bindings = {{KeyModifiers::kNone, vk}};
-    if (chord) bindings.push_back({KeyModifiers::kCtrl | KeyModifiers::kShift, chordLetter});
-    return FormatKeyBindings(bindings);
+std::string KeyList(int vk, bool chord, char chordLetter, const char* key, std::vector<cfg::DroppedValue>& dropped) {
+    std::string list = cfg::LegacyVirtualKeyToBindings(vk, "Hotkeys", key, dropped);
+    if (!chord) return list;
+    const std::string chordText = FormatKeyBindings({{KeyModifiers::kCtrl | KeyModifiers::kShift, chordLetter}});
+    return list.empty() ? chordText : list + ", " + chordText;
 }
 
 }  // namespace
@@ -115,19 +115,40 @@ cfg::ImportResult MapLegacyConfig(legacy::ReadStatus status, const legacy::Confi
     out.position.limit_z = read.pos_limit_z;
     out.position.limit_z_back = read.pos_limit_z_back;
 
-    // The frozen reader never hands back a code outside 0x01-0xFE or a modifier key, so every
-    // list formats.
-    out.toggle_key_name = KeyList(read.vk_toggle, read.chord_toggle, 'Y');
-    out.cycle_tracking_mode_key_name = KeyList(read.vk_cycle_mode, read.chord_cycle_mode, 'G');
-    out.yaw_mode_key_name = KeyList(read.vk_yaw_mode, read.chord_yaw_mode, 'H');
+    out.toggle_key_name = KeyList(read.vk_toggle, read.chord_toggle, 'Y', "Toggle", dropped);
+    out.cycle_tracking_mode_key_name = KeyList(read.vk_cycle_mode, read.chord_cycle_mode, 'G', "CycleMode", dropped);
+    out.yaw_mode_key_name = KeyList(read.vk_yaw_mode, read.chord_yaw_mode, 'H', "YawMode", dropped);
 
     out.fov_override = read.fov_override;
     out.discovery = read.discovery;
     out.light.follows_head = read.light_follows_head;
     out.light.multiplier = read.light_multiplier;
 
-    return status == legacy::ReadStatus::Absent ? cfg::ImportResult::Absent(std::move(dropped), std::move(shaping))
-                                                : cfg::ImportResult::Imported(std::move(dropped), std::move(shaping));
+    // A setting still at what the build shipped is no player's choice, so it follows Defaults.ini.
+    using C = cfg::schema::Concept;
+    const legacy::Config shipped;
+    cfg::LegacyFollowsDefaultsIni follows;
+    follows.Setting(C::UdpPort, read.udp_port, shipped.udp_port);
+    follows.Setting(C::EnableOnStartup, read.enabled_on_startup, shipped.enabled_on_startup);
+    follows.Setting(C::WorldSpaceYaw, read.world_space_yaw, shipped.world_space_yaw);
+    follows.TrackingMode(read.position_enabled, shipped.position_enabled);
+    follows.Setting(C::LocalSmoothing, read.local_smoothing, shipped.local_smoothing);
+    follows.Setting(C::RemoteSmoothing, read.remote_smoothing, shipped.remote_smoothing);
+    follows.Setting(C::PositionLimitX, read.pos_limit_x, shipped.pos_limit_x);
+    follows.Setting(C::PositionLimitY, read.pos_limit_y, shipped.pos_limit_y);
+    follows.Setting(C::PositionLimitYDown, read.pos_limit_y_down, shipped.pos_limit_y_down);
+    follows.Setting(C::PositionLimitZ, read.pos_limit_z, shipped.pos_limit_z);
+    follows.Setting(C::PositionLimitZBack, read.pos_limit_z_back, shipped.pos_limit_z_back);
+    follows.Setting(C::ToggleKey, read.vk_toggle == shipped.vk_toggle && read.chord_toggle == shipped.chord_toggle);
+    follows.Setting(C::CycleTrackingModeKey,
+                    read.vk_cycle_mode == shipped.vk_cycle_mode && read.chord_cycle_mode == shipped.chord_cycle_mode);
+    follows.Setting(C::YawModeKey, read.vk_yaw_mode == shipped.vk_yaw_mode && read.chord_yaw_mode == shipped.chord_yaw_mode);
+    follows.Setting(C::LightFollowsHead, read.light_follows_head, shipped.light_follows_head);
+    follows.Setting(C::LightMultiplier, read.light_multiplier, shipped.light_multiplier);
+
+    return status == legacy::ReadStatus::Absent
+               ? cfg::ImportResult::Absent(std::move(dropped), std::move(shaping), follows.Concepts())
+               : cfg::ImportResult::Imported(std::move(dropped), std::move(shaping), follows.Concepts());
 }
 
 cfg::LegacyImport<Config> LegacyConfigImport() {
