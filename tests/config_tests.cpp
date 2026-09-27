@@ -187,6 +187,13 @@ void SaveTests(Scratch& scratch, const std::string& committed) {
           "the position-only save changes exactly the pair");
 
     before = ReadBytes(file);
+    Check(owner.Save([](Config& c) { c.true_free_look = true; }).status == cfg::ConfigSaveStatus::Saved,
+          "true free look saves");
+    changed = ChangedLines(before, ReadBytes(file));
+    Check(changed.size() == 1 && changed[0] == "TrueFreeLook=default -> TrueFreeLook=true",
+          "the true free look save writes its value over default and changes no other line");
+
+    before = ReadBytes(file);
     bool threw = false;
     try {
         owner.Save([](Config& c) { c.enable_on_startup = false; });
@@ -202,8 +209,26 @@ void SaveTests(Scratch& scratch, const std::string& committed) {
 
     const cfg::ConfigLoadResult<Config> loaded = cfg::ConfigOwner<Config>(Options(folder, defaults)).Load();
     Check(loaded.status == cfg::ConfigLoadStatus::Canonical && !loaded.config.world_space_yaw &&
-              !loaded.config.rotation_enabled && loaded.config.position_enabled,
+              !loaded.config.rotation_enabled && loaded.config.position_enabled && loaded.config.true_free_look,
           "the saved toggles come back at the next load");
+}
+
+// TrueFreeLook starts off. A legacy file carrying the retired ADS cycle's setting, at any of its
+// values, migrates cleanly with true free look off: `tracked` was not free look.
+void TrueFreeLookStartsOffAndTheRetiredAdsModeIsNotTranslated(Scratch& scratch) {
+    Check(!metroex::ConfigTable().defaults().true_free_look, "TrueFreeLook defaults to false");
+    for (const char* mode : {"paused", "marker", "tracked"}) {
+        const fs::path folder = scratch.Folder(std::string("ads-mode-") + mode);
+        WriteBytes(folder / metroex::kLegacyConfigFileName,
+                   std::string("[View]\r\nAdsMode=") + mode + "\r\n[Hotkeys]\r\nAdsMode=0x2D\r\nChordAdsMode=1\r\n");
+        const cfg::ConfigLoadResult<Config> loaded =
+            cfg::ConfigOwner<Config>(Options(folder, scratch.Defaults(std::string("ads-mode-") + mode))).Load();
+        Check(loaded.status == cfg::ConfigLoadStatus::Migrated && loaded.diagnostics.empty(),
+              "a legacy file with the retired AdsMode migrates without a diagnostic");
+        Check(!loaded.config.true_free_look, "and true free look is off whatever AdsMode held");
+        Check(ReadBytes(folder / metroex::kConfigFileName).find("AdsMode") == std::string::npos,
+              "and AdsMode is not written into CameraUnlock.ini");
+    }
 }
 
 // FieldOfView is 0 or 60 to 120. Anything else keeps the default, 0, which leaves the game's own
@@ -248,6 +273,7 @@ int main(int argc, char** argv) {
         RenderTest(committed);
         CreatedIsTheCommittedFile(scratch, committed);
         SaveTests(scratch, committed);
+        TrueFreeLookStartsOffAndTheRetiredAdsModeIsNotTranslated(scratch);
         FieldOfViewReadsZeroOrSixtyToOneTwenty();
     } catch (const std::exception& e) {
         Check(false, e.what());

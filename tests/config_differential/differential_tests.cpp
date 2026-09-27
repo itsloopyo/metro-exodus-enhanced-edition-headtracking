@@ -190,7 +190,7 @@ bool LogSays(const std::vector<std::string>& log, const std::string& text) {
 // Startup state: what each build does with its Config
 // ---------------------------------------------------------------------------
 
-enum class Action { Toggle, CycleMode, YawMode, AdsMode };
+enum class Action { Toggle, CycleMode, YawMode, AdsMode, TrueFreeLook };
 
 const char* ActionName(Action a) {
     switch (a) {
@@ -198,6 +198,7 @@ const char* ActionName(Action a) {
         case Action::CycleMode: return "cycle mode";
         case Action::YawMode: return "yaw mode";
         case Action::AdsMode: return "ADS mode";
+        case Action::TrueFreeLook: return "true free look";
     }
     throw std::logic_error("action");
 }
@@ -480,12 +481,17 @@ struct Startup {
     bool discovery = false;
     bool light_follows_head = false;
     uint32_t light_multiplier = 0;
+    bool true_free_look = false;
     std::vector<Registration> hotkeys;
 };
 
+Startup FromMigration(const Config& c);
+
 // The frozen reader's build: [Position] Enabled chose between the first two modes
 // (TrackingRuntime::Start at 7cca164), and CameraHook::Initialise took the field of view, the
-// discovery switch and the light from the Config as read.
+// discovery switch and the light from the Config as read. That build had no true free look, so
+// the setting and its keys start where this build's table defaults put them; the import leaves
+// both to Defaults.ini.
 Startup FromImport(const legacy::Config& c) {
     Startup s;
     s.port = c.udp_port;
@@ -504,6 +510,12 @@ Startup FromImport(const legacy::Config& c) {
     s.light_follows_head = c.light_follows_head;
     s.light_multiplier = Bits(c.light_multiplier);
     s.hotkeys = ImportHotkeys(c);
+    const Startup fresh = FromMigration(metroex::ConfigTable().defaults());
+    s.true_free_look = fresh.true_free_look;
+    for (const Registration& r : fresh.hotkeys) {
+        if (r.action == Action::TrueFreeLook) s.hotkeys.push_back(r);
+    }
+    std::sort(s.hotkeys.begin(), s.hotkeys.end());
     return s;
 }
 
@@ -537,10 +549,12 @@ Startup FromMigration(const Config& c) {
     s.discovery = c.discovery;
     s.light_follows_head = c.light.follows_head;
     s.light_multiplier = Bits(c.light.multiplier);
+    s.true_free_look = c.true_free_look;
     const metroex::HotkeyBindings bindings = metroex::ParseHotkeys(c);
     AddBindings(s.hotkeys, Action::Toggle, bindings.toggle);
     AddBindings(s.hotkeys, Action::CycleMode, bindings.cycleMode);
     AddBindings(s.hotkeys, Action::YawMode, bindings.yawMode);
+    AddBindings(s.hotkeys, Action::TrueFreeLook, bindings.trueFreeLook);
     std::sort(s.hotkeys.begin(), s.hotkeys.end());
     return s;
 }
@@ -564,6 +578,7 @@ std::vector<std::string> StartupDifferences(const Startup& a, const Startup& b) 
     SAME(discovery);
     SAME(light_follows_head);
     SAME(light_multiplier);
+    SAME(true_free_look);
 #undef SAME
     if (a.hotkeys != b.hotkeys) out.push_back("hotkeys " + Describe(a.hotkeys) + " against " + Describe(b.hotkeys));
     return out;
@@ -602,6 +617,8 @@ Startup Follow(const Startup& player, const Startup& global, const std::vector<c
             case C::YawModeKey: takeKeys(Action::YawMode); break;
             case C::LightFollowsHead: s.light_follows_head = global.light_follows_head; break;
             case C::LightMultiplier: s.light_multiplier = global.light_multiplier; break;
+            case C::TrueFreeLook: s.true_free_look = global.true_free_look; break;
+            case C::TrueFreeLookKey: takeKeys(Action::TrueFreeLook); break;
             default: throw std::logic_error("follows_defaults_ini names a concept the table does not bind");
         }
     }
@@ -644,10 +661,12 @@ std::set<cfg::schema::Concept> UntouchedRows(const legacy::Config& c) {
     row(C::YawModeKey, KeysOf(a.hotkeys, Action::YawMode) == KeysOf(b.hotkeys, Action::YawMode));
     row(C::LightFollowsHead, a.light_follows_head == b.light_follows_head);
     row(C::LightMultiplier, a.light_multiplier == b.light_multiplier);
+    row(C::TrueFreeLook, a.true_free_look == b.true_free_look);
+    row(C::TrueFreeLookKey, KeysOf(a.hotkeys, Action::TrueFreeLook) == KeysOf(b.hotkeys, Action::TrueFreeLook));
     return out;
 }
 
-constexpr size_t kGlobalRows = 17;
+constexpr size_t kGlobalRows = 19;
 
 // The only difference comparison 2 allows: every sensitivity and inversion the frozen reader
 // read is listed, folded where it holds the shipped identity value, and dropped as PoseShaping
@@ -728,9 +747,9 @@ const char kSkewedDefaults[] =
     "[Network]\r\nUdpPort=5252\r\n\r\n"
     "[General]\r\nEnableOnStartup=false\r\nWorldSpaceYaw=false\r\nRotationEnabled=false\r\n\r\n"
     "[Smoothing]\r\nLocalSmoothing=0.5\r\nRemoteSmoothing=0.5\r\n\r\n"
-    "[Position]\r\nPositionEnabled=true\r\nPositionLimitX=0.5\r\nPositionLimitY=0.5\r\n"
+    "[Position]\r\nPositionEnabled=true\r\nTrueFreeLook=true\r\nPositionLimitX=0.5\r\nPositionLimitY=0.5\r\n"
     "PositionLimitYDown=0.5\r\nPositionLimitZ=0.5\r\nPositionLimitZBack=0.5\r\n\r\n"
-    "[Hotkeys]\r\nToggleKey=F8\r\nCycleTrackingModeKey=F9\r\nYawModeKey=F10\r\n\r\n"
+    "[Hotkeys]\r\nToggleKey=F8\r\nCycleTrackingModeKey=F9\r\nYawModeKey=F10\r\nTrueFreeLookKey=F11\r\n\r\n"
     "[Light]\r\nLightFollowsHead=false\r\nLightMultiplier=3.0\r\n";
 
 cfg::ConfigOwnerOptions<Config> Options(const std::wstring& folder, const std::wstring& defaults) {
@@ -920,8 +939,8 @@ int main() {
             if (fresh.status != cfg::ConfigLoadStatus::Created) throw std::logic_error("the skewed first start");
             folders.skewed_global = FromMigration(fresh.config);
             const std::vector<std::string> moved = StartupDifferences(FromImport(legacy::Config{}), folders.skewed_global);
-            // Thirteen fields and the hotkey list; the pair is the one mode field.
-            if (moved.size() != 14) Fail("skewed Defaults.ini", "does not differ from the built-in values on every row");
+            // Fourteen fields and the hotkey list; the pair is the one mode field.
+            if (moved.size() != 15) Fail("skewed Defaults.ini", "does not differ from the built-in values on every row");
         }
         MigrationTally tally;
         tally.committed = ReadBytes(Widen(METROEX_COMMITTED_CONFIG));

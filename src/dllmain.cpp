@@ -113,6 +113,11 @@ void ToggleYawModeAndSave() {
     Save([worldSpaceYaw](Config& c) { c.world_space_yaw = worldSpaceYaw; });
 }
 
+void ToggleTrueFreeLookAndSave() {
+    const bool trueFreeLook = g_tracking.ToggleTrueFreeLook();
+    Save([trueFreeLook](Config& c) { c.true_free_look = trueFreeLook; });
+}
+
 DWORD WINAPI InitThread(LPVOID) {
     OpenLog();
 
@@ -152,11 +157,12 @@ DWORD WINAPI InitThread(LPVOID) {
 
     g_tracking.Start(g_config);
 
-    // End changes the session only. The mode and yaw keys save what they switch to.
+    // End changes the session only. The mode, yaw and free-look keys save what they switch to.
     Hotkeys::Actions actions;
     actions.toggle = [] { g_tracking.ToggleEnabled(); };
     actions.cycleMode = [] { CycleModeAndSave(); };
     actions.yawMode = [] { ToggleYawModeAndSave(); };
+    actions.trueFreeLook = [] { ToggleTrueFreeLookAndSave(); };
     g_hotkeys.Start(g_config, std::move(actions));
 
     // Last, because it is the one that can fail on a build the rest of the mod

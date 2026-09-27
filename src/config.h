@@ -73,8 +73,8 @@ private:
     cameraunlock::config::FloatCodec angle_{0.0f, kMax};
 };
 
-// Every row of the settings file. WorldSpaceYaw and the tracking-mode pair are the rows the
-// hotkeys save; End changes the session only.
+// Every row of the settings file. WorldSpaceYaw, TrueFreeLook and the tracking-mode pair are the
+// rows the hotkeys save; End changes the session only.
 cameraunlock::config::ConfigTable<Config> ConfigTable();
 
 // Reads a pre-canonical file through the frozen reader in legacy_config/, then maps it.

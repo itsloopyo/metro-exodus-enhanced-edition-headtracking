@@ -31,7 +31,8 @@ public:
     // game state, both polled by the caller rather than latched. Fills `out` and
     // returns a verdict for which PoseApplies() is true whenever the pose should
     // reach the camera. With the sights up the rotation is passed through
-    // untouched and only the lean eases out - see ads.h.
+    // untouched and only the lean eases out, unless true free look is on - see
+    // ads.h.
     TrackingState SamplePerFrame(bool inGameplay, bool aiming, HeadPose& out);
 
     void ToggleEnabled();
@@ -48,6 +49,11 @@ public:
     // thread; the camera hook reads IsWorldSpaceYaw() per frame, so the switch
     // lands on the very next frame and needs no restart.
     bool ToggleYawMode();
+
+    // Flips between sights locked and true free look, and returns the new
+    // setting (true: true free look). Called from the hotkey thread; the render
+    // thread picks it up on its next frame.
+    bool ToggleTrueFreeLook();
 
     bool IsEnabled() const { return m_enabled.load(std::memory_order_relaxed); }
 
@@ -96,6 +102,10 @@ private:
     // Written from the hotkey thread, read by the camera hook on the render
     // thread. Initialised from the config in Start().
     std::atomic<bool> m_worldSpaceYaw{true};
+
+    // Written from the hotkey thread, read by the render thread. Initialised
+    // from the config in Start().
+    std::atomic<bool> m_trueFreeLook{false};
 
     // Render-thread only. Owns the shape of the lean easing out as the sights
     // come up and back in as they go down.
