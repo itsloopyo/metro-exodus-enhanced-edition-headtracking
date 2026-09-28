@@ -96,17 +96,3 @@ jobs:
             Write-Host "::error::No installer ZIP was produced by the package step"
             exit 1
           }
-
-      # So a tester can be handed a build without cutting a release and without
-      # anyone pushing a scratch branch to a public repo.
-      - name: Upload the packaged ZIPs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: MetroExodusHeadTracking-${{ github.sha }}
-          path: release/*.zip
-          if-no-files-found: error
-          retention-days: 14
-          # The name is stable across a re-run of the same run, and v7 fails on a
-          # name that already exists. Without this, "Re-run jobs" on a run whose
-          # upload succeeded is a red build for no reason.
-          overwrite: true
