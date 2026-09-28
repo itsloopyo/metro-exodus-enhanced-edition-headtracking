@@ -28,7 +28,7 @@ jobs:
     # prefix to skip. The old 'Release v' matched nothing this repo ever commits,
     # which meant every release ran this job in parallel with the release job
     # doing the identical build.
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore: bump version to ') }}
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore: bump version to ') }}"
 
     steps:
       - name: Checkout code
