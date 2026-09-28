@@ -19,6 +19,8 @@
 - Head tracking carries on through the sights whatever `[View] AdsMode` held, and that key is no longer read (9554397).
 - `[Hotkeys] AdsMode` and `ChordAdsMode` are no longer read, and neither Insert nor Ctrl+Shift+U cycles an ADS mode any more (9554397).
 - A setting that the defaults the README shows set to `default` is written as `default` when you never changed it from the default earlier versions used, because `MetroExodusHeadTracking.ini` does not hold it or holds that default. It then follows `Defaults.ini`, so it takes the value `Defaults.ini` gives it, or the built-in value where `Defaults.ini` gives none, which can differ from the default earlier versions used. A setting you changed is written with the value imported for it, or as `default` where that value equals its default at that start.
+- A smoothing, position limit or light multiplier in `MetroExodusHeadTracking.ini` that is not a number the mod can use (`nan`, `inf`) is written as `default`.
+- A smoothing, position limit or light multiplier in `MetroExodusHeadTracking.ini` outside the range it takes is brought to the nearest end of that range, and the log says so.
 
 ### Added
 

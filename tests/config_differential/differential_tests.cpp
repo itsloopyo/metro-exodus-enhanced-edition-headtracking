@@ -974,6 +974,24 @@ int main() {
             }
         }
 
+        // N2 and N4 need no call in the map: the frozen reader already takes a number that is not
+        // finite as the built-in value, so the row stays untouched and is written default, and
+        // clamps one outside 0 to 10, the schema's range, so the clamped value is carried.
+        for (const auto& limit : {std::make_pair("nan", "PositionLimitZ=default\r\n"),
+                                  std::make_pair("inf", "PositionLimitZ=default\r\n"),
+                                  std::make_pair("25", "PositionLimitZ=10.0\r\n"),
+                                  std::make_pair("-3", "PositionLimitZ=0.0\r\n")}) {
+            const std::string name = std::string("LimitZ=") + limit.first;
+            EmptyFolder(folders.migration);
+            WriteBytes(folders.migration + L"\\" + kLegacyName, Replaced(shipped, "LimitZ=0.4", name));
+            const cfg::ConfigLoadResult<Config> loaded =
+                cfg::ConfigOwner<Config>(Options(folders.migration, folders.defaults)).Load();
+            if (loaded.status != cfg::ConfigLoadStatus::Migrated) Fail(name, "does not migrate");
+            if (ReadBytes(folders.migration + L"\\" + kConfigName).find(limit.second) == std::string::npos) {
+                Fail(name, std::string("the migrated file does not hold ") + limit.second);
+            }
+        }
+
         const std::vector<IniMutation> corpus =
             GenerateIniMutations(shipped, metroex::LegacyConfigImport().keys, CorpusKeys());
         for (const IniMutation& m : corpus) RunInput(folders, "corpus: " + m.name, m.bytes, tally);
