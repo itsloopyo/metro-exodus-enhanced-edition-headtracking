@@ -83,6 +83,18 @@ if (Test-GitTagExists -Tag $tag) {
 
 Write-Host "Releasing $currentVersion -> $newVersion (tag $tag)" -ForegroundColor Cyan
 
+Write-Host "Running the full test suite..." -ForegroundColor Cyan
+Push-Location $ProjectRoot
+try {
+    pixi run test
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: pixi run test failed. Nothing was changed." -ForegroundColor Red
+        exit 1
+    }
+} finally {
+    Pop-Location
+}
+
 # THIRD-PARTY-NOTICES.md names the cameraunlock-core commit compiled into the
 # release ZIPs, and bumping the submodule does not touch it. A wrong hash reads
 # exactly like a right one, so re-sync it before the tag rather than shipping

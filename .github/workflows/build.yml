@@ -14,11 +14,12 @@ on:
       - 'docs/**'
       - 'LICENSE'
 
-# Read-only token. This job only checks out and builds; nothing it runs needs
-# to write to the repository, and the default token permissions are whatever the
-# repository setting happens to be rather than what this workflow needs.
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -65,7 +66,7 @@ jobs:
       # and a different CRT, and nothing else ever runs that configuration.
       - name: Run tests against the Release build
         shell: pwsh
-        run: pixi run test-release
+        run: pixi run test-release-unit
 
 
       - name: Verify build outputs

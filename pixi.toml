@@ -27,12 +27,16 @@ configure = { cmd = "cmake -S . -B build -A x64" }
 build = { cmd = "cmake --build build --config Release", depends-on = ["configure"] }
 build-debug = { cmd = "cmake --build build --config Debug", depends-on = ["configure"] }
 
-test = { cmd = "ctest --test-dir build -C Debug --output-on-failure", depends-on = ["build-debug"] }
+test-unit = { cmd = "ctest --test-dir build -C Debug --output-on-failure -LE differential", depends-on = ["build-debug"] }
+test-differential = { cmd = "ctest --test-dir build -C Debug --output-on-failure --no-tests=error -L differential", depends-on = ["build-debug"] }
+test = { depends-on = ["test-unit", "test-differential"] }
 
 # The Debug run above is not the binary that ships. Release is /O2 and links a
 # different CRT, and this mod is float-heavy enough that an optimiser-exposed
 # difference would otherwise reach a player with nothing having run against it.
-test-release = { cmd = "ctest --test-dir build -C Release --output-on-failure", depends-on = ["build"] }
+test-release-unit = { cmd = "ctest --test-dir build -C Release --output-on-failure -LE differential", depends-on = ["build"] }
+test-release-differential = { cmd = "ctest --test-dir build -C Release --output-on-failure --no-tests=error -L differential", depends-on = ["build"] }
+test-release = { depends-on = ["test-release-unit", "test-release-differential"] }
 
 # Rewrites MetroExodusHeadTracking.ini, the table's fresh render and the bytes a first start
 # writes to CameraUnlock.ini, after a change to a row, a comment or a default, then writes the
@@ -63,7 +67,7 @@ release-nightly = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File s
 # then `pixi run package` and never `pixi run test`, so without this a local
 # release can cut an installer ZIP out of a tree whose suites fail. CI happened
 # to be covered because build.yml runs the suites separately.
-package = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["test", "build"] }
+package = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["test-unit", "build"] }
 
 install = { cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy.ps1", depends-on = ["build"] }
 # cmd.exe directly rather than through powershell -Command: the wrapper is a

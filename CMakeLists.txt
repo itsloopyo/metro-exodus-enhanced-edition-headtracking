@@ -231,3 +231,4 @@ set_tests_properties(metroex_config_lint PROPERTIES DEPENDS metroex_config_diffe
 add_test(NAME metroex_config_frozen
     COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/config_differential/check-frozen.ps1)
+set_tests_properties(metroex_config_differential metroex_config_lint metroex_config_frozen PROPERTIES LABELS differential)
