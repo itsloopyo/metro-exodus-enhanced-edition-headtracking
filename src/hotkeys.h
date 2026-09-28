@@ -14,10 +14,9 @@ struct HotkeyBindings {
     std::vector<cameraunlock::input::KeyBinding> toggle;
     std::vector<cameraunlock::input::KeyBinding> cycleMode;
     std::vector<cameraunlock::input::KeyBinding> yawMode;
-    std::vector<cameraunlock::input::KeyBinding> trueFreeLook;
 };
 
-// The four key lists of the settings file, parsed. Throws std::logic_error for a list that
+// The three key lists of the settings file, parsed. Throws std::logic_error for a list that
 // does not parse: the config table read each one with the same parser, so that is a bug.
 HotkeyBindings ParseHotkeys(const Config& cfg);
 
@@ -29,10 +28,9 @@ public:
         Action toggle;
         Action cycleMode;
         Action yawMode;
-        Action trueFreeLook;
     };
 
-    // Registers the four key lists of the settings file on the hotkey thread.
+    // Registers the three key lists of the settings file on the hotkey thread.
     bool Start(const Config& cfg, Actions actions);
 
 private:

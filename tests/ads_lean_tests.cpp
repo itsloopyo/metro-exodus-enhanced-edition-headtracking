@@ -1,6 +1,5 @@
 // What the camera is fed while the sights are up: the whole rotation, and a lean
-// that eases out as they come up and back in as they go down, unless true free
-// look is on, when it stays.
+// that eases out as they come up and back in as they go down.
 //
 // Driven through AdsFade frame by frame, the same way TrackingRuntime drives it,
 // so a regression in either the easing or the pose it is applied to fails here.
@@ -90,56 +89,6 @@ void AReversalContinuesFromWhereTheLeanWas() {
               1.0f, "arriving back at the full lean");
 }
 
-void TheLeanEasesOutOnlyWithTheSightsUpAndFreeLookOff() {
-    Check(!metroex::LeanEasesOut(false, false), "sights locked, at the hip: the lean stays");
-    Check(!metroex::LeanEasesOut(false, true), "true free look, at the hip: the lean stays");
-    Check(metroex::LeanEasesOut(true, false), "sights locked, sights up: the lean eases out");
-    Check(!metroex::LeanEasesOut(true, true), "true free look, sights up: the lean stays");
-}
-
-void HipFireIsUntouchedInTrueFreeLook() {
-    metroex::AdsFade fade;
-    const metroex::HeadPose in = MakePose();
-    const metroex::HeadPose out =
-        metroex::EaseLeanForSights(in, fade.Update(metroex::LeanEasesOut(false, true), 0));
-    CheckRotationUntouched(out, "true free look at the hip: the rotation is the head's");
-    CheckNear(out.x, in.x, "and so is the lean");
-    CheckNear(out.y, in.y, "and so is the lean");
-    CheckNear(out.z, in.z, "and so is the lean");
-}
-
-void TrueFreeLookWithTheSightsUpPassesThePoseThrough() {
-    metroex::AdsFade fade;
-    fade.Update(metroex::LeanEasesOut(false, true), 0);
-    fade.Update(metroex::LeanEasesOut(true, true), 10);
-    const metroex::HeadPose in = MakePose();
-    const metroex::HeadPose out = metroex::EaseLeanForSights(
-        in, fade.Update(metroex::LeanEasesOut(true, true), 10 + metroex::AdsFade::kLowerMs));
-    CheckRotationUntouched(out, "true free look with the sights up: the rotation is the head's");
-    CheckNear(out.x, in.x, "and the lateral lean stays in full");
-    CheckNear(out.y, in.y, "and the vertical one");
-    CheckNear(out.z, in.z, "and the forward one");
-}
-
-// Switching to true free look half way through the lean easing out turns the
-// fade round from where it had got to, exactly as dropping the sights would.
-void ATogglePartWayContinuesFromWhereTheLeanWas() {
-    metroex::AdsFade fade;
-    fade.Update(metroex::LeanEasesOut(false, false), 0);
-    fade.Update(metroex::LeanEasesOut(true, false), 10);
-    const float mid = fade.Update(metroex::LeanEasesOut(true, false), 10 + metroex::AdsFade::kLowerMs / 2);
-    const float toggled = fade.Update(metroex::LeanEasesOut(true, true), 10 + metroex::AdsFade::kLowerMs / 2);
-    CheckNear(toggled, mid, "the frame free look comes on starts where the lean had got to");
-    const float next = fade.Update(metroex::LeanEasesOut(true, true), 10 + metroex::AdsFade::kLowerMs / 2 + 16);
-    Check(next >= toggled && next - toggled < 0.2f, "and it heads back in without a step");
-    CheckNear(fade.Update(metroex::LeanEasesOut(true, true),
-                          10 + metroex::AdsFade::kLowerMs + metroex::AdsFade::kRaiseMs),
-              1.0f, "arriving at the full lean with the sights still up");
-    fade.Update(metroex::LeanEasesOut(true, false), 1000);
-    CheckNear(fade.Update(metroex::LeanEasesOut(true, false), 1000 + metroex::AdsFade::kLowerMs), 0.0f,
-              "and switching back to sights locked mid-aim eases it out again");
-}
-
 }  // namespace
 
 int main() {
@@ -147,10 +96,6 @@ int main() {
     WithTheSightsUpTheRotationStaysAndTheLeanIsGone();
     MidTransitionOnlyTheLeanIsScaled();
     AReversalContinuesFromWhereTheLeanWas();
-    TheLeanEasesOutOnlyWithTheSightsUpAndFreeLookOff();
-    HipFireIsUntouchedInTrueFreeLook();
-    TrueFreeLookWithTheSightsUpPassesThePoseThrough();
-    ATogglePartWayContinuesFromWhereTheLeanWas();
 
     return metroex_test::Report();
 }

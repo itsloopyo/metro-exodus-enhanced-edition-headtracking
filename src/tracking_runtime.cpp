@@ -38,10 +38,6 @@ const char* YawAxisName(bool worldSpaceYaw) {
     return worldSpaceYaw ? "world up-axis (horizon locked)" : "camera up-axis";
 }
 
-const char* FreeLookName(bool trueFreeLook) {
-    return trueFreeLook ? "ON" : "OFF (sights locked)";
-}
-
 }  // namespace
 
 cameraunlock::TrackingMode StartupTrackingMode(const Config& cfg) {
@@ -83,9 +79,6 @@ void TrackingRuntime::Start(const Config& cfg) {
     m_worldSpaceYaw.store(m_cfg.world_space_yaw, std::memory_order_relaxed);
     Log::Line("Yaw axis: %s", YawAxisName(m_cfg.world_space_yaw));
 
-    m_trueFreeLook.store(m_cfg.true_free_look, std::memory_order_relaxed);
-    Log::Line("True free look: %s", FreeLookName(m_cfg.true_free_look));
-
     m_enabled.store(m_cfg.enable_on_startup, std::memory_order_release);
 }
 
@@ -101,13 +94,6 @@ bool TrackingRuntime::ToggleYawMode() {
     const bool next = !m_worldSpaceYaw.load(std::memory_order_relaxed);
     m_worldSpaceYaw.store(next, std::memory_order_relaxed);
     Log::Line("Yaw axis: %s", YawAxisName(next));
-    return next;
-}
-
-bool TrackingRuntime::ToggleTrueFreeLook() {
-    const bool next = !m_trueFreeLook.load(std::memory_order_relaxed);
-    m_trueFreeLook.store(next, std::memory_order_relaxed);
-    Log::Line("True free look: %s", FreeLookName(next));
     return next;
 }
 
@@ -179,19 +165,17 @@ TrackingState TrackingRuntime::SamplePerFrame(bool inGameplay, bool aiming, Head
     }
 
     const TrackingState state = DecideTracking(enabled, inGameplay, live, aiming);
-    const bool trueFreeLook = m_trueFreeLook.load(std::memory_order_relaxed);
 
     if (!PoseApplies(state.verdict)) {
-        // Only while the lean would be in. Resetting while it is eased out puts
-        // the fade back at the hip, and the frame the suppression lifts on would
+        // Only when the sights are down. Resetting while they are up puts the
+        // fade back at the hip, and the frame the suppression lifts on would
         // then hand the camera the whole lean for one frame before easing it
         // back out.
-        if (!LeanEasesOut(aiming, trueFreeLook)) m_adsFade.Reset();
+        if (!aiming) m_adsFade.Reset();
         return state;
     }
 
-    out = EaseLeanForSights(absolute,
-                            m_adsFade.Update(LeanEasesOut(state.aiming, trueFreeLook), nowMs));
+    out = EaseLeanForSights(absolute, m_adsFade.Update(state.aiming, nowMs));
     return state;
 }
 

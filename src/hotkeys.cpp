@@ -32,7 +32,6 @@ HotkeyBindings ParseHotkeys(const Config& cfg) {
         ParseList(cfg.toggle_key_name, "ToggleKey"),
         ParseList(cfg.cycle_tracking_mode_key_name, "CycleTrackingModeKey"),
         ParseList(cfg.yaw_mode_key_name, "YawModeKey"),
-        ParseList(cfg.true_free_look_key_name, "TrueFreeLookKey"),
     };
 }
 
@@ -45,16 +44,15 @@ bool Hotkeys::Start(const Config& cfg, Actions actions) {
     cameraunlock::input::RegisterKeyBindings(m_poller, bindings.toggle, std::move(actions.toggle));
     cameraunlock::input::RegisterKeyBindings(m_poller, bindings.cycleMode, std::move(actions.cycleMode));
     cameraunlock::input::RegisterKeyBindings(m_poller, bindings.yawMode, std::move(actions.yawMode));
-    cameraunlock::input::RegisterKeyBindings(m_poller, bindings.trueFreeLook, std::move(actions.trueFreeLook));
 
     if (!m_poller.Start(kPollIntervalMs)) {
         Log::Line("ERROR: HotkeyPoller failed to start");
         return false;
     }
 
-    Log::Line("Hotkeys: ToggleKey=%s, CycleTrackingModeKey=%s, YawModeKey=%s, TrueFreeLookKey=%s",
+    Log::Line("Hotkeys: ToggleKey=%s, CycleTrackingModeKey=%s, YawModeKey=%s",
               cfg.toggle_key_name.c_str(), cfg.cycle_tracking_mode_key_name.c_str(),
-              cfg.yaw_mode_key_name.c_str(), cfg.true_free_look_key_name.c_str());
+              cfg.yaw_mode_key_name.c_str());
 
     m_started = true;
     return true;

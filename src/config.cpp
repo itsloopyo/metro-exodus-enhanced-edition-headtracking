@@ -48,13 +48,12 @@ cfg::ConfigTable<Config> ConfigTable() {
     using C = cfg::schema::Concept;
     cfg::ConfigTable<Config> table = cfg::HeadTrackingConfigTable<Config>(
         {C::UdpPort, C::EnableOnStartup, C::WorldSpaceYaw, C::RotationEnabled, C::LocalSmoothing,
-         C::RemoteSmoothing, C::PositionEnabled, C::TrueFreeLook, C::PositionLimitX, C::PositionLimitY,
-         C::PositionLimitYDown, C::PositionLimitZ, C::PositionLimitZBack, C::ToggleKey, C::CycleTrackingModeKey,
-         C::YawModeKey, C::TrueFreeLookKey, C::LightFollowsHead, C::LightMultiplier});
+         C::RemoteSmoothing, C::PositionEnabled, C::PositionLimitX, C::PositionLimitY, C::PositionLimitYDown,
+         C::PositionLimitZ, C::PositionLimitZBack, C::ToggleKey, C::CycleTrackingModeKey, C::YawModeKey,
+         C::LightFollowsHead, C::LightMultiplier});
     table.Select(C::WorldSpaceYaw).Writable()
         .Select(C::RotationEnabled).Writable()
-        .Select(C::PositionEnabled).Writable()
-        .Select(C::TrueFreeLook).Writable();
+        .Select(C::PositionEnabled).Writable();
     table.Local("Camera", "FieldOfView", &Config::fov_override, FovCodec{},
                 "Field of view in degrees, the number the game's own Field of View slider sets.\n"
                 "0 leaves that slider alone; otherwise 60 to 120. The game stops its slider at 75, and\n"
@@ -146,8 +145,6 @@ cfg::ImportResult MapLegacyConfig(legacy::ReadStatus status, const legacy::Confi
     follows.Setting(C::YawModeKey, read.vk_yaw_mode == shipped.vk_yaw_mode && read.chord_yaw_mode == shipped.chord_yaw_mode);
     follows.Setting(C::LightFollowsHead, read.light_follows_head, shipped.light_follows_head);
     follows.Setting(C::LightMultiplier, read.light_multiplier, shipped.light_multiplier);
-    follows.NotInLegacy(C::TrueFreeLook);
-    follows.NotInLegacy(C::TrueFreeLookKey);
 
     return status == legacy::ReadStatus::Absent
                ? cfg::ImportResult::Absent(std::move(dropped), std::move(shaping), follows.Concepts())
